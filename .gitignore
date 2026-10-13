@@ -16,3 +16,13 @@ __pycache__/
 node_modules/
 dist/
 build/
+
+```gitignore
+# DermAI uploaded images
+backend/uploads/
+
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+```

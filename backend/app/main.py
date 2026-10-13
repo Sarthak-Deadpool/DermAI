@@ -9,10 +9,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.db.database import Base, engine
 from app.models.user import User
 from app.models.case import Case
+from app.models.image import Image
 
 
 from app.routes.auth import router as auth_router
 from app.routes.cases import router as cases_router
+from app.routes.image import router as images_router
 
 @asynccontextmanager
 async def lifespan(app : FastAPI):
@@ -27,6 +29,7 @@ app = FastAPI(
 
 app.include_router(auth_router)
 app.include_router(cases_router)
+app.include_router(images_router)
 
 
 @app.get("/health")

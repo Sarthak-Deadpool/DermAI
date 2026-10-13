@@ -43,7 +43,7 @@ def list_cases_endpoint(
     return list_cases_controller(db, current_user);
 
 @router.get(
-    "{case_id}",
+    "/{case_id}",
     response_model=CaseResponse,
 )
 def get_case_endpoint(
