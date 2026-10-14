@@ -89,3 +89,4 @@ def test_login_invalid_credentials():
 
     assert response.status_code in (400, 401)
     assert "dermai_access_token" not in response.cookies
+
