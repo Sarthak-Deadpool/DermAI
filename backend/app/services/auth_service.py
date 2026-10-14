@@ -13,11 +13,18 @@ from app.repositories.revoked_token_repository import revoke_token
 
 from app.schemas.user import UserRegister, UserLogin
 
+
+
 def register_user(db: Session, user_data: UserRegister) -> User:
     existing_user = get_user_by_email(db, user_data.email)
 
     if existing_user:
         raise ValueError("Email is already registered")
+    
+    if user_data.role == UserRole.ADMIN :
+        raise ValueError(
+            "Administrator accounts cannot be created through public registration"
+        )
 
     hashed_password = hash_password(user_data.password)
 
@@ -25,7 +32,7 @@ def register_user(db: Session, user_data: UserRegister) -> User:
         username = user_data.username,
         email=user_data.email,
         password_hash = hashed_password,
-        role=UserRole.USER,
+        role=user_data.role
     )
 
     return create_user(db, new_user);
