@@ -1,10 +1,10 @@
-from fastapi import HTTPException, status
+﻿from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 
-from app.schemas.user import UserRegister, UserResponse, UserLogin, TokenResponse
-from app.services.auth_service import register_user, login_user
+from app.schemas.user import UserRegister, UserResponse, UserLogin
+from app.services.auth_service import register_user, login_user, logout_user
 
 
 def register_controller(
@@ -31,20 +31,17 @@ def register_controller(
 def login_controller(
         db: Session,
         user_data: UserLogin,
-) -> TokenResponse :
+) -> str :
 
     try:
         access_token = login_user(db, user_data)
 
-        return TokenResponse(
-            access_token = access_token,
-            token_type="bearer",
-        )
+        return  access_token
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-            headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
@@ -52,3 +49,25 @@ def login_controller(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed",
         ) from exc
+
+
+def logout_controller(
+    db: Session,
+    access_token: str
+) -> None:
+    try:
+        logout_user(db, access_token)
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token",
+        ) from exc
+
+    except SQLAlchemyError as exc:
+     db.rollback()
+
+     raise HTTPException(
+        status_code=500,
+        detail="Logout failed",
+    ) from exc

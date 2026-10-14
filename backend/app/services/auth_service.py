@@ -1,11 +1,15 @@
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
+import jwt
 
-from app.core.security import hash_password, verify_password, create_access_token
+
+from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
 from app.models.user import User, UserRole
 from app.repositories.user_repository import(
     create_user,
     get_user_by_email,
 )
+from app.repositories.revoked_token_repository import revoke_token
 
 from app.schemas.user import UserRegister, UserLogin
 
@@ -43,3 +47,30 @@ def login_user(db: Session, user_data: UserLogin) -> str:
     access_token = create_access_token(str(user.id))
 
     return access_token
+
+
+def logout_user(db: Session, access_token:str) -> None:
+    try:
+        
+        payload = decode_access_token(access_token)
+    except jwt.InvalidTokenError as exc:
+        raise ValueError("Invalid access token") from exc
+    
+    jti = payload.get("jti")
+    expires_at_timestamp = payload.get("exp")
+    
+    if not jti or not expires_at_timestamp:
+        raise ValueError("Invalid access token")
+    
+    expires_at = datetime.fromtimestamp(
+        expires_at_timestamp,
+        tz=timezone.utc
+    )
+    
+    revoke_token(
+        db=db,
+        jti=jti,
+        expires_at=expires_at,
+    )
+
+

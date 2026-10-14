@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status, Cookie, HTTPException
 from sqlalchemy.orm import Session
 
-from app.controllers.auth_controller import register_controller, login_controller
+from app.controllers.auth_controller import register_controller, login_controller, logout_controller
 from app.dependencies.database import get_db
-from app.schemas.user import UserRegister, UserResponse, UserLogin, TokenResponse
+from app.schemas.user import UserRegister, UserResponse, UserLogin
 from app.dependencies.auth import get_current_user
 from app.models.user import User, UserRole
 from app.dependencies.authorization import require_roles
+from app.core.config import settings
 
 
 
@@ -26,15 +27,29 @@ def register(
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
 
 )
 def login(
     user_data : UserLogin,
+    response: Response,
     db: Session = Depends(get_db),
 ):
-    return login_controller(db, user_data)
+    access_token = login_controller(db, user_data)
+    
+    response.set_cookie(
+        key=settings.JWT_COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        secure=settings.JWT_COOKIE_SECURE,
+        samesite=settings.JWT_COOKIE_SAMESITE,
+        max_age=30*60,
+        path="/",
+    )
+    return {
+        "message": "Login successful",
+        "token_type": "bearer",
+    }
 
 
 @router.get(
@@ -48,12 +63,41 @@ def get_me(
     return current_user
 
 
-# @router.get("/test-admin")
-# def test_admin_access(
-#     current_user: User = Depends(require_roles(UserRole.USER)),
-# ):
-#     return {
-#         "message": "Admin access granted",
-#         "username": current_user.username,
-#         "role": current_user.role.value,
-#     }
+@router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+)
+def logout(
+    response: Response,
+    token: str | None = Cookie(
+        default=None,
+        alias=settings.JWT_COOKIE_NAME,
+    ),
+    db: Session = Depends(get_db),
+): 
+    if token is None:
+        
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+        
+    logout_controller(db, token)
+    
+    response.delete_cookie(
+        key=settings.JWT_COOKIE_NAME,
+        path="/",
+        secure=settings.JWT_COOKIE_SECURE,
+        httponly=True,
+        samesite=settings.JWT_COOKIE_SAMESITE
+    )
+    
+    response.delete_cookie(
+        key=settings.CSRF_COOKIE_NAME,
+        path="/",
+        secure=settings.JWT_COOKIE_SECURE,
+        httponly=False,
+        samesite=settings.JWT_COOKIE_SAMESITE,
+    )
+    
+    return {"message" : "Logout successful"}

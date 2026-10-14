@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     DB_USER: str
     DB_PASSWORD: str
     JWT_SECRET_KEY: str
+    JWT_COOKIE_NAME: str = "dermai_access_token"
+    JWT_COOKIE_SECURE: bool = False
+    JWT_COOKIE_SAMESITE: str = "lax"
+    CSRF_COOKIE_NAME: str = "dermai_csrf_token"
 
 
     model_config = SettingsConfigDict(
