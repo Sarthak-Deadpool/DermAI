@@ -1,4 +1,5 @@
-﻿import secrets
+import secrets
+import hmac
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
@@ -10,7 +11,7 @@ CSRF_TOKEN_MAX_AGE_SECONDS = 30*60
 
 def _get_serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(
-        secret_key=settings.JWT_SECRET_KEY,
+        secret_key=settings.CSRF_SECRET_KEY,
         salt="dermai-csrf-v1"
     )
 
@@ -19,12 +20,27 @@ def create_csrf_token() -> str:
     return _get_serializer().dumps(random_value)
 
 
-def validate_csrf_token(token: str) -> bool:
+def validate_csrf_token(submitted_token : str,
+                        csrf_cookie_token: str) -> bool:
+    
+    if not submitted_token or not csrf_cookie_token:
+        return False
+    
+    
+    if not hmac.compare_digest(
+        submitted_token,
+        csrf_cookie_token,
+    ):
+        return False
+    
     try:
         value = _get_serializer().loads(
-            token,
+            submitted_token,
             max_age=CSRF_TOKEN_MAX_AGE_SECONDS,
         )
-        return isinstance(value, str) and bool(value)
-    except (BadSignature, ValueError, TypeError):
+        
+    except(BadSignature, ValueError, TypeError):
         return False
+    
+    return isinstance(value, str) and bool(value);
+   

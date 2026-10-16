@@ -1,4 +1,4 @@
-from sqlalchemy import URL, create_engine
+from sqlalchemy import URL, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
@@ -25,10 +25,11 @@ SessionLocal = sessionmaker(
     autocommit=False,
 )
 class Base(DeclarativeBase):
+    
+    #Base Class for SQLAlchemy ORM model
     pass
 
 def check_database_connection() -> bool:
-    from sqlalchemy import text
 
     with engine.connect() as connection:
         connection.execute(text("SELECT 1"))

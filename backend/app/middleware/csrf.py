@@ -1,6 +1,8 @@
-﻿import secrets
+import secrets
 
-from fastapi import Request
+from collections.abc import Awaitable, Callable
+
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
@@ -8,7 +10,10 @@ from app.core.csrf import validate_csrf_token
 
 UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-async def csrf_middleware(request: Request, call_next):
+async def csrf_middleware(
+    request: Request,
+    call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
     if request.method not in UNSAFE_METHODS:
         return await call_next(request)
 
@@ -27,7 +32,7 @@ async def csrf_middleware(request: Request, call_next):
             content={"detail": "CSRF token mismatch"},
         )
 
-    if not validate_csrf_token(header_token):
+    if not validate_csrf_token(header_token, cookie_token):
         return JSONResponse(
             status_code=403,
             content={"detail": "Inavalid or expired CSRF token"},

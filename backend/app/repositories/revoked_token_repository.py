@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from app.models.revoked_token import RevokedToken
@@ -11,16 +11,19 @@ def revoke_token(
     jti: str,
     expires_at: datetime,
 ) -> RevokedToken:
-    revoke_token = RevokedToken(
+    revoked = RevokedToken(
         jti =jti,
         expires_at = expires_at,
     )
+    try:
+        db.add(revoked)
+        db.commit()
+        db.refresh(revoked)
+        return revoked
+    except Exception:
+        db.rollback()
+        raise
     
-    db.add(revoke_token)
-    db.commit()
-    db.refresh(revoke_token)
-    
-    return revoke_token
 
 def is_token_revoked(db: Session, jti: str) -> bool:
     statement = select(RevokedToken.jti).where(
@@ -32,14 +35,16 @@ def is_token_revoked(db: Session, jti: str) -> bool:
 def delete_expired_revoked_token(db: Session) -> int:
     now = datetime.now(timezone.utc)
     
-    statement = select(RevokedToken).where(
+    statement = delete(RevokedToken).where(
         RevokedToken.expires_at <= now
     )
     
-    expired_token = db.scalar(statement).all()
     
-    for token in expired_token:
-        db.delete(token)
-    db.commit()
-    
-    return len(expired_token)
+    try:
+        result = db.execute(statement)
+        deleted_count = result.rowcount or 0
+        db.commit()
+        return deleted_count
+    except Exception:
+        db.rollback()
+        raise

@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 import jwt
+from sqlalchemy.exc import IntegrityError
 
 
 from app.core.security import hash_password, verify_password, create_access_token, decode_access_token
@@ -9,21 +10,32 @@ from app.repositories.user_repository import(
     create_user,
     get_user_by_email,
 )
-from app.repositories.revoked_token_repository import revoke_token
+from app.repositories.revoked_token_repository import is_token_revoked, revoke_token
 
 from app.schemas.user import UserRegister, UserLogin
 
 
 
 def register_user(db: Session, user_data: UserRegister) -> User:
-    existing_user = get_user_by_email(db, user_data.email)
+    
+    PUBLIC_REGISTRATION_ROLES = {
+    UserRole.USER,
+    UserRole.CLINICIAN,
+    UserRole.RESEARCHER,
+    UserRole.DATA_SCIENTIST,
+    }
+    
+    email = str(user_data.email)
+    
+    
+    existing_user = get_user_by_email(db,email)
 
     if existing_user:
         raise ValueError("Email is already registered")
     
-    if user_data.role == UserRole.ADMIN :
+    if user_data.role not in PUBLIC_REGISTRATION_ROLES :
         raise ValueError(
-            "Administrator accounts cannot be created through public registration"
+            "This role cannot be assigned through public registration"
         )
 
     hashed_password = hash_password(user_data.password)
@@ -34,26 +46,28 @@ def register_user(db: Session, user_data: UserRegister) -> User:
         password_hash = hashed_password,
         role=user_data.role
     )
+    
+    try:
+        return create_user(db, new_user)
+    except IntegrityError as exc:
+        raise ValueError("Email is already register") from exc
+    
 
-    return create_user(db, new_user);
+def login_user(db: Session, user_data: UserLogin) -> tuple[str, User]:
+    
+    email = str(user_data.email)
+    
+    user = get_user_by_email(db, email)
 
-def login_user(db: Session, user_data: UserLogin) -> str:
-    user = get_user_by_email(db, user_data.email)
-
-    if not user:
-        raise ValueError("Invalid email or password")
-
-    password_is_valid = verify_password(
+    if user is None or not verify_password(
         user_data.password,
         user.password_hash,
-    )
-
-    if not password_is_valid:
+    ):
         raise ValueError("Invalid email or password")
 
+    
     access_token = create_access_token(str(user.id))
-
-    return access_token
+    return access_token, user
 
 
 def logout_user(db: Session, access_token:str) -> None:
@@ -64,20 +78,41 @@ def logout_user(db: Session, access_token:str) -> None:
         raise ValueError("Invalid access token") from exc
     
     jti = payload.get("jti")
-    expires_at_timestamp = payload.get("exp")
+    exp = payload.get("exp")
+    subject = payload.get("sub")
     
-    if not jti or not expires_at_timestamp:
+    if not isinstance(jti, str) or not jti:
         raise ValueError("Invalid access token")
     
-    expires_at = datetime.fromtimestamp(
-        expires_at_timestamp,
-        tz=timezone.utc
-    )
+    if not isinstance(subject, str) or not subject:
+        raise ValueError("Invalid access token")
+    
+    if isinstance(exp, bool) or not isinstance(exp, (int, float)):
+        raise ValueError("Invalid access token")
+    
+    try:
+        expires_at = datetime.fromtimestamp(
+            exp,
+            tz=timezone.utc,
+        )
+    except (OverflowError, OSError, ValueError) as exc:
+        raise ValueError("Invalid access token") from exc
+    
+    
+    
+    if expires_at <= datetime.now(timezone.utc):
+        raise ValueError("Inavalid or expired access token")
+    
+    
+    if is_token_revoked(db, jti):
+        return
+    
     
     revoke_token(
         db=db,
         jti=jti,
         expires_at=expires_at,
     )
+
 
 

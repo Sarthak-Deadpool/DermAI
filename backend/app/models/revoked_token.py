@@ -1,6 +1,6 @@
-﻿from datetime import datetime
+from datetime import datetime
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String, func, Index
 from sqlalchemy.orm import Mapped, mapped_column
 
 
@@ -9,6 +9,11 @@ from app.db.database import Base
 
 class RevokedToken(Base):
     __tablename__="revoked_token"
+    
+    __table_args__ = (
+             Index("ix_revoked_token_expires_at", "expires_at"),
+    )
+
 
     jti:Mapped[str] = mapped_column(
         String(64),

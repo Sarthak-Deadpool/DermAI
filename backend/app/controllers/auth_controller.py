@@ -1,6 +1,9 @@
-﻿from fastapi import HTTPException, status
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+
+from app.models.user import User
 
 
 from app.schemas.user import UserRegister, UserResponse, UserLogin
@@ -16,10 +19,19 @@ def register_controller(
         user = register_user(db, user_data)
         return UserResponse.model_validate(user)
     except ValueError as exc:
+        message = str(exc)
+        
+        if message == "Email is already registered":
+            raise HTTPException (
+                status_code=status.HTTP_409_CONFLICT,
+                detail=message,
+            ) from exc
+            
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="A user with these details already exists",
-        ) from exc
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=message,
+        )from exc
+        
     except SQLAlchemyError as exc:
         db.rollback()
         raise HTTPException(
@@ -31,17 +43,16 @@ def register_controller(
 def login_controller(
         db: Session,
         user_data: UserLogin,
-) -> str :
+) -> tuple[str, User] :
 
     try:
-        access_token = login_user(db, user_data)
 
-        return  access_token
+        return  login_user(db, user_data)
 
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
+            detail="Inavalid email or password",
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
@@ -68,6 +79,6 @@ def logout_controller(
      db.rollback()
 
      raise HTTPException(
-        status_code=500,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         detail="Logout failed",
     ) from exc

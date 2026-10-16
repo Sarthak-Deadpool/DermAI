@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import Input from "../common/Input";
 import Button from "../common/Button";
 import authService from "../../services/authService";
+import RoleDropdown from "../common/RoleDropdown";
 
 const initialFormData = {
   username: "",
@@ -114,29 +115,14 @@ export default function RegisterForm() {
         autoComplete="email"
       />
 
-      <div className="space-y-1.5">
-        <label
-          htmlFor="role"
-          className="block text-sm font-medium text-slate-700"
-        >
-          Register as
-        </label>
-
-        <select
-          id="role"
-          name="role"
-          value={formData.role}
-          onChange={handleChange}
-          required
-          className={compactInputClass}
-        >
-          {roles.map((role) => (
-            <option key={role.value} value={role.value}>
-              {role.label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <RoleDropdown
+        id="role"
+        name="role"
+        value={formData.role}
+        onChange={handleChange}
+        options={roles}
+        required
+      />
 
       <div className="space-y-1.5">
         <label
@@ -220,7 +206,7 @@ export default function RegisterForm() {
         </p>
       )}
 
-      <Button type="submit" disabled={loading} className="!py-2.5">
+      <Button type="submit" disabled={loading} className="py-2.5">
         {loading ? "Creating account..." : "Create account"}
       </Button>
 

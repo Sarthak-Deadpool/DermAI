@@ -35,7 +35,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ):
-    access_token = login_controller(db, user_data)
+    access_token, user = login_controller(db, user_data)
     
     response.set_cookie(
         key=settings.JWT_COOKIE_NAME,
@@ -48,7 +48,7 @@ def login(
     )
     return {
         "message": "Login successful",
-        "token_type": "bearer",
+        "user": UserResponse.model_validate(user),
     }
 
 
