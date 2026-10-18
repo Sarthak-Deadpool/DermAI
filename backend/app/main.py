@@ -21,6 +21,7 @@ from app.routes.auth import router as auth_router
 from app.routes.cases import router as cases_router
 from app.routes.image import router as images_router
 from app.routes.csrf import router as csrf_router
+from app.routes.patient import router as patients_router
 
 @asynccontextmanager
 async def lifespan(app : FastAPI):
@@ -47,6 +48,7 @@ app.include_router(auth_router)
 app.include_router(csrf_router)
 app.include_router(cases_router)
 app.include_router(images_router)
+app.include_router(patients_router)
 
 
 @app.get("/health")

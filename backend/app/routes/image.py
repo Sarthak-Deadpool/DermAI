@@ -7,7 +7,6 @@ from app.controllers.image_controller import upload_case_image_controller
 
 from app.dependencies.auth import get_current_user
 from app.dependencies.database import get_db
-from app.models.image import Image
 from app.models.user import User
 
 router = APIRouter(

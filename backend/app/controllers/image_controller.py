@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import UploadFile
+from fastapi import UploadFile, HTTPException
 from sqlalchemy.orm import Session
 
 from app.models.image import Image
@@ -13,9 +13,19 @@ def upload_case_image_controller(
     file: UploadFile,
     current_user: User,
 ) -> Image:
-    return upload_case_image(
-        db=db,
-        case_id=case_id,
-        owner_user_id=current_user.id,
-        file=file
-    )
+    
+    try:
+        return upload_case_image(
+            db=db,
+            case_id=case_id,
+            owner_user_id=current_user.id,
+            file=file
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while uploading the image.",
+        ) from exc

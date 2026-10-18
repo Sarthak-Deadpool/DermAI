@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -24,8 +24,20 @@ class Case(Base):
         index=True,
     )
     
+    patient_id:Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patients.id"),
+        nullable=False,
+        index=True,
+    )
+    
     case_label: Mapped[str | None] = mapped_column(
         String(100),
+        nullable=True,
+    )
+    
+    description: Mapped[str | None] = mapped_column(
+        Text,
         nullable=True,
     )
     

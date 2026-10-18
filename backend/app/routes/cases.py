@@ -8,6 +8,7 @@ from app.controllers.case_controller import (
     create_case_controller,
     get_case_controller,
     list_cases_controller,
+    list_patient_cases_controller,
 )
 
 from app.dependencies.auth import get_current_user
@@ -24,7 +25,7 @@ router = APIRouter(prefix="/api/v1/cases", tags=["Cases"])
     response_model=CaseResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_case_endpoint(
+def create_case_route(
     case_data :CaseCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -36,17 +37,36 @@ def create_case_endpoint(
     "",
     response_model=list[CaseResponse],
 )
-def list_cases_endpoint(
+def list_cases_route(
     db:Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     return list_cases_controller(db, current_user);
 
+
+@router.get(
+    "/patient/{patient_id}",
+    response_model=list[CaseResponse],
+)
+def list_patient_cases_route(
+    patient_id :UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return list_patient_cases_controller(
+        db,
+        patient_id,
+        current_user,
+    )
+
+
+
+
 @router.get(
     "/{case_id}",
     response_model=CaseResponse,
 )
-def get_case_endpoint(
+def get_case_route(
     case_id: UUID,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
