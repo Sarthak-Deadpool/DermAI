@@ -1,5 +1,12 @@
 import apiClient from "../api/client";
 
+const ensureCsrfToken = async () => {
+    await apiClient.get("/auth/csrf");
+}
+
+
+
+
 const authServices = {
     async getCsrfToken() {
         const response = await apiClient.get("/auth/csrf");
@@ -7,13 +14,13 @@ const authServices = {
     },
 
     async register(userData) {
-        await this.getCsrfToken();
+        await ensureCsrfToken();
         const response = await apiClient.post("/auth/register", userData);
         return response.data;
     },
 
     async login(credentials) {
-        await this.getCsrfToken();
+        await ensureCsrfToken();
         const response = await apiClient.post("/auth/login", credentials);
         return response.data;
     },
@@ -24,7 +31,7 @@ const authServices = {
     },
 
     async logout() {
-        await this.getCsrfToken();
+        await ensureCsrfToken();
         const response = await apiClient.post("/auth/logout");
         return response.data;
     }

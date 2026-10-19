@@ -1,152 +1,250 @@
 /** @format */
-
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { ArrowLeft, ClipboardPlus, LoaderCircle } from "lucide-react";
+import Sidebar from "../components/sidebar/Sidebar";
 import { createCase } from "../services/caseService";
+
+const initialForm = {
+  patient_id: "",
+  case_label: "",
+  description: "",
+  body_location: "",
+  image_source: "mobile_camera",
+};
 
 export default function CreateCasePage() {
   const navigate = useNavigate();
 
-  const [caseName, setCaseName] = useState("");
-  const [bodyLocation, setBodyLocation] = useState("");
-  const [imageSource, setImageSource] = useState("mobile");
+  const [form, setForm] = useState(initialForm);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  function handleChange(event) {
+    const { name, value } = event.target;
+    setForm((previous) => ({ ...previous, [name]: value }));
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
-    if (loading) return;
-
-    setLoading(true);
     setError("");
 
-    try {
-      const createdCase = await createCase({
-        case_label: caseName.trim() || null,
-        body_location: bodyLocation.trim() || null,
-        image_source: imageSource.trim() || null,
-      });
+    if (!form.patient_id.trim()) {
+      setError("Patient ID is required.");
+      return;
+    }
 
-      navigate(`/cases/${createdCase.id}`);
+    setLoading(true);
+
+    try {
+      const payload = {
+        patient_id: form.patient_id.trim(),
+        case_label: form.case_label.trim() || null,
+        description: form.description.trim() || null,
+        body_location: form.body_location.trim() || null,
+        image_source: form.image_source || null,
+      };
+
+      await createCase(payload);
+      navigate("/my-cases", {
+        replace: true,
+        state: { message: "Case created successfully." },
+      });
     } catch (err) {
+      const detail = err.response?.data?.detail;
       setError(
-        err.response?.data?.detail ||
-          err.message ||
-          "Unable to create case. Please try again.",
+        typeof detail === "string"
+          ? detail
+          : "Unable to create the case. Check the patient ID and try again.",
       );
     } finally {
       setLoading(false);
     }
   }
 
-  return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto max-w-2xl">
-        <button
-          type="button"
-          onClick={() => navigate("/dashboard")}
-          className="mb-6 text-sm font-medium text-cyan-700 hover:underline"
-        >
-          ← Back to Dashboard
-        </button>
+  const inputClass =
+    "mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-teal-500 focus:ring-4 focus:ring-teal-500/10";
 
-        <div className="mb-7">
-          <p className="text-sm font-semibold text-cyan-700">
-            DermAI Workspace
-          </p>
-          <h1 className="mt-2 text-3xl font-bold text-slate-900">
-            Create a New Case
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Create a separate workspace to organize skin images and research
-            observations for this case.
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Sidebar role="user" />
+
+      <main className="min-h-screen px-5 py-8 md:ml-64 md:px-8">
+        <div className="mx-auto max-w-3xl">
+          <Link
+            to="/my-cases"
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-slate-500 transition hover:text-teal-700"
+          >
+            <ArrowLeft size={17} />
+            Back to My Cases
+          </Link>
+
+          <div className="mb-7 flex items-start gap-4">
+            <div className="rounded-2xl bg-teal-50 p-3 text-teal-700">
+              <ClipboardPlus size={26} />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+                Create New Case
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                Create a case record before adding skin images or analyses.
+              </p>
+            </div>
+          </div>
+
+          <form
+            onSubmit={handleSubmit}
+            className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-8"
+          >
+            {error && (
+              <div
+                role="alert"
+                className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              >
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-5">
+              <div>
+                <label
+                  htmlFor="patient_id"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Patient ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="patient_id"
+                  name="patient_id"
+                  value={form.patient_id}
+                  onChange={handleChange}
+                  placeholder="Enter an existing patient UUID"
+                  className={inputClass}
+                  required
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  Use the ID of a patient that already exists in your database.
+                </p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="case_label"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Case Name
+                </label>
+                <input
+                  id="case_label"
+                  name="case_label"
+                  value={form.case_label}
+                  onChange={handleChange}
+                  maxLength={100}
+                  placeholder="e.g. Skin lesion — left forearm"
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="body_location"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Body Location
+                </label>
+                <select
+                  id="body_location"
+                  name="body_location"
+                  value={form.body_location}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  <option value="">Select a location</option>
+                  {[
+                    "Face",
+                    "Scalp",
+                    "Neck",
+                    "Chest",
+                    "Back",
+                    "Arm",
+                    "Forearm",
+                    "Hand",
+                    "Leg",
+                    "Foot",
+                    "Other",
+                  ].map((location) => (
+                    <option key={location} value={location}>
+                      {location}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="image_source"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Intended Image Source
+                </label>
+                <select
+                  id="image_source"
+                  name="image_source"
+                  value={form.image_source}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  <option value="mobile_camera">Mobile camera</option>
+                  <option value="gallery_upload">Gallery upload</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="description"
+                  className="text-sm font-semibold text-slate-700"
+                >
+                  Description
+                </label>
+                <textarea
+                  id="description"
+                  name="description"
+                  value={form.description}
+                  onChange={handleChange}
+                  rows={4}
+                  placeholder="Optional notes about this case..."
+                  className={`${inputClass} resize-y`}
+                />
+              </div>
+            </div>
+
+            <div className="mt-8 flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+              <Link
+                to="/my-cases"
+                className="rounded-xl border border-slate-200 px-5 py-3 text-center text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+              >
+                Cancel
+              </Link>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loading && <LoaderCircle size={17} className="animate-spin" />}
+                {loading ? "Creating Case..." : "Create Case"}
+              </button>
+            </div>
+          </form>
+
+          <p className="mt-4 text-xs leading-5 text-slate-500">
+            Creating a case only saves its basic information. Image upload and
+            AI analysis will be separate steps.
           </p>
         </div>
-
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8"
-        >
-          <div className="space-y-2">
-            <label
-              htmlFor="caseName"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Case Name
-            </label>
-            <input
-              id="caseName"
-              value={caseName}
-              onChange={(event) => setCaseName(event.target.value)}
-              maxLength={100}
-              placeholder="e.g. Skin Observation 001"
-              disabled={loading}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-600 focus:ring-4 focus:ring-cyan-600/10 disabled:opacity-60"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="bodyLocation"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Body Location
-            </label>
-            <input
-              id="bodyLocation"
-              value={bodyLocation}
-              onChange={(event) => setBodyLocation(event.target.value)}
-              maxLength={100}
-              placeholder="e.g. arm, leg, face (optional)"
-              disabled={loading}
-              className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none focus:border-cyan-600 focus:ring-4 focus:ring-cyan-600/10 disabled:opacity-60"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label
-              htmlFor="imageSource"
-              className="block text-sm font-medium text-slate-700"
-            >
-              Image Source
-            </label>
-            <select
-              id="imageSource"
-              value={imageSource}
-              onChange={(event) => setImageSource(event.target.value)}
-              disabled={loading}
-              className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm outline-none focus:border-cyan-600 focus:ring-4 focus:ring-cyan-600/10 disabled:opacity-60"
-            >
-              <option value="mobile">Mobile photo</option>
-              <option value="clinical">Clinical photo</option>
-              <option value="dermoscopic">Dermoscopic image</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-
-          {error && (
-            <p
-              role="alert"
-              className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-xl bg-cyan-700 px-5 py-3 font-semibold text-white transition hover:bg-cyan-800 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? "Creating case..." : "Create Case & Open Workspace"}
-          </button>
-
-          <p className="text-xs leading-5 text-slate-500">
-            This academic research prototype does not provide a confirmed
-            medical diagnosis.
-          </p>
-        </form>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }

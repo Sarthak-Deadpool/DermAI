@@ -1,0 +1,119 @@
+{
+  "best_epoch": 5,
+  "best_validation_metrics": {
+    "accuracy": 0.5343283582089552,
+    "macro_f1": 0.42128863140050116,
+    "balanced_accuracy": 0.45857279745472135,
+    "per_class": {
+      "ACK": {
+        "support": 107,
+        "precision": 0.5769230769230769,
+        "recall": 0.5607476635514018,
+        "f1": 0.5687203791469194
+      },
+      "BCC": {
+        "support": 123,
+        "precision": 0.6528925619834711,
+        "recall": 0.6422764227642277,
+        "f1": 0.6475409836065574
+      },
+      "MEL": {
+        "support": 9,
+        "precision": 0.2777777777777778,
+        "recall": 0.5555555555555556,
+        "f1": 0.3703703703703704
+      },
+      "NEV": {
+        "support": 40,
+        "precision": 0.5853658536585366,
+        "recall": 0.6,
+        "f1": 0.5925925925925926
+      },
+      "SCC": {
+        "support": 28,
+        "precision": 0.08333333333333333,
+        "recall": 0.03571428571428571,
+        "f1": 0.05
+      },
+      "SEK": {
+        "support": 28,
+        "precision": 0.2564102564102564,
+        "recall": 0.35714285714285715,
+        "f1": 0.29850746268656714
+      }
+    },
+    "confusion_matrix": [
+      [
+        60,
+        27,
+        1,
+        1,
+        5,
+        13
+      ],
+      [
+        22,
+        79,
+        4,
+        5,
+        6,
+        7
+      ],
+      [
+        0,
+        1,
+        5,
+        2,
+        0,
+        1
+      ],
+      [
+        4,
+        3,
+        6,
+        24,
+        0,
+        3
+      ],
+      [
+        14,
+        7,
+        0,
+        1,
+        1,
+        5
+      ],
+      [
+        4,
+        4,
+        2,
+        8,
+        0,
+        10
+      ]
+    ],
+    "loss": 1.4063357926126736
+  },
+  "class_names": [
+    "ACK",
+    "BCC",
+    "MEL",
+    "NEV",
+    "SCC",
+    "SEK"
+  ],
+  "training_class_counts": {
+    "ACK": 499,
+    "BCC": 608,
+    "MEL": 30,
+    "NEV": 164,
+    "SCC": 127,
+    "SEK": 164
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "learning_rate": 0.001,
+  "epochs_requested": 10,
+  "pretrained_weights": "ResNet18 ImageNet DEFAULT",
+  "training_mode": "frozen feature extractor"
+}

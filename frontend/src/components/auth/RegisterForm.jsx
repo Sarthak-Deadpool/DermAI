@@ -41,6 +41,8 @@ export default function RegisterForm() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (loading) return;
     setError("");
     setSuccess("");
 
@@ -102,6 +104,7 @@ export default function RegisterForm() {
         autoComplete="username"
         minLength={3}
         maxLength={50}
+        required
       />
 
       <Input
@@ -113,6 +116,7 @@ export default function RegisterForm() {
         onChange={handleChange}
         placeholder="you@example.com"
         autoComplete="email"
+        required
       />
 
       <RoleDropdown

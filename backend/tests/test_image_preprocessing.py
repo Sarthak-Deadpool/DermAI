@@ -6,11 +6,9 @@ from PIL import Image
 from app.services.image_preprocessing import preprocess_image
 
 
-def test_preprocess_uploaded_image():
-    image_path = (
-        "uploads/2c2fe58f-021e-44bd-8f47-9c4d633d5999/"
-        "3d5ccafd215e45f8beafba70b953a642.png"
-    )
+def test_preprocess_uploaded_image(tmp_path):
+    image_path = tmp_path / "uploaded_sample.png"
+    Image.new("RGB", (320, 180), "blue").save(image_path)
 
     result = preprocess_image(image_path)
 

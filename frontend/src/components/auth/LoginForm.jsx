@@ -1,8 +1,6 @@
 /** @format */
-
-import { useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import Input from "../common/Input";
 import Button from "../common/Button";
@@ -11,6 +9,9 @@ import authService from "../../services/authService";
 
 export default function LoginForm() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = location.state?.from?.pathname || "/dashboard";
 
   const [formData, setFormData] = useState({
     email: "",
@@ -32,12 +33,15 @@ export default function LoginForm() {
 
   async function handleSubmit(event) {
     event.preventDefault();
+
+    if (loading) return;
+
     setError("");
     setLoading(true);
 
     try {
       await authService.login(formData);
-      navigate("/dashboard", { replace: true });
+      navigate(from, { replace: true });
     } catch (err) {
       setError(
         err.response?.data?.detail ||
@@ -59,6 +63,7 @@ export default function LoginForm() {
         onChange={handleChange}
         placeholder="you@example.com"
         autoComplete="email"
+        required
       />
 
       <div className="space-y-2">
@@ -87,6 +92,7 @@ export default function LoginForm() {
           onChange={handleChange}
           placeholder="Enter your password"
           autoComplete="current-password"
+          required
         />
       </div>
 

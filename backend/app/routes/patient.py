@@ -27,7 +27,7 @@ from app.controllers.patient_controller import (
 )
 
 router = APIRouter(
-    prefix="/patients",
+    prefix="/api/v1/patients",
     tags=["Patients"],
 )
 
