@@ -1,0 +1,138 @@
+{
+  "experiment": "ResNet18 fine-tuning with weighted sampler",
+  "best_epoch": 10,
+  "best_validation_metrics": {
+    "accuracy": 0.373134328358209,
+    "macro_f1": 0.4089479061281243,
+    "balanced_accuracy": 0.4798655660121354,
+    "per_class": {
+      "ACK": {
+        "support": 107,
+        "precision": 0.7291666666666666,
+        "recall": 0.32710280373831774,
+        "f1": 0.4516129032258064
+      },
+      "BCC": {
+        "support": 123,
+        "precision": 0.6785714285714286,
+        "recall": 0.15447154471544716,
+        "f1": 0.25165562913907286
+      },
+      "MEL": {
+        "support": 9,
+        "precision": 0.5,
+        "recall": 0.3333333333333333,
+        "f1": 0.4
+      },
+      "NEV": {
+        "support": 40,
+        "precision": 0.5862068965517241,
+        "recall": 0.85,
+        "f1": 0.6938775510204082
+      },
+      "SCC": {
+        "support": 28,
+        "precision": 0.10884353741496598,
+        "recall": 0.5714285714285714,
+        "f1": 0.18285714285714286
+      },
+      "SEK": {
+        "support": 28,
+        "precision": 0.375,
+        "recall": 0.6428571428571429,
+        "f1": 0.4736842105263159
+      }
+    },
+    "confusion_matrix": [
+      [
+        35,
+        7,
+        1,
+        4,
+        46,
+        14
+      ],
+      [
+        8,
+        19,
+        2,
+        10,
+        81,
+        3
+      ],
+      [
+        0,
+        0,
+        3,
+        2,
+        1,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        34,
+        1,
+        5
+      ],
+      [
+        5,
+        1,
+        0,
+        1,
+        16,
+        5
+      ],
+      [
+        0,
+        1,
+        0,
+        7,
+        2,
+        18
+      ]
+    ],
+    "loss": 1.419808955156981
+  },
+  "class_names": [
+    "ACK",
+    "BCC",
+    "MEL",
+    "NEV",
+    "SCC",
+    "SEK"
+  ],
+  "training_class_counts": {
+    "ACK": 499,
+    "BCC": 608,
+    "MEL": 30,
+    "NEV": 164,
+    "SCC": 127,
+    "SEK": 164
+  },
+  "sampler_class_counts": {
+    "ACK": 499,
+    "BCC": 608,
+    "MEL": 30,
+    "NEV": 164,
+    "SCC": 127,
+    "SEK": 164
+  },
+  "sampling_strategy": "WeightedRandomSampler",
+  "sampler_replacement": true,
+  "sampler_num_samples": 1592,
+  "weighted_loss_enabled": true,
+  "seed": 42,
+  "batch_size": 16,
+  "backbone_learning_rate": 1e-05,
+  "head_learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "epochs_requested": 10,
+  "patience": 3,
+  "pretrained_weights": "ResNet18 ImageNet DEFAULT",
+  "training_mode": "layer4 and classification head fine-tuned",
+  "checkpoint_path": "C:\\Users\\Sarthak\\Desktop\\DermAI\\models\\checkpoints\\resnet18_finetune_sampler.pt",
+  "training_history_path": "C:\\Users\\Sarthak\\Desktop\\DermAI\\reports\\finetune_sampler\\training_history.csv",
+  "note": "Validation metrics are calculated on the original validation distribution. Training metrics reflect weighted sampling."
+}

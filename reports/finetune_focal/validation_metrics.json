@@ -1,0 +1,129 @@
+{
+  "experiment": "ResNet18 fine-tuning with focal loss",
+  "best_epoch": 10,
+  "best_validation_metrics": {
+    "accuracy": 0.6238805970149254,
+    "macro_f1": 0.486768263113778,
+    "balanced_accuracy": 0.4704156882467801,
+    "per_class": {
+      "ACK": {
+        "support": 107,
+        "precision": 0.6407766990291263,
+        "recall": 0.616822429906542,
+        "f1": 0.6285714285714286
+      },
+      "BCC": {
+        "support": 123,
+        "precision": 0.6513157894736842,
+        "recall": 0.8048780487804879,
+        "f1": 0.72
+      },
+      "MEL": {
+        "support": 9,
+        "precision": 1.0,
+        "recall": 0.2222222222222222,
+        "f1": 0.3636363636363636
+      },
+      "NEV": {
+        "support": 40,
+        "precision": 0.6521739130434783,
+        "recall": 0.75,
+        "f1": 0.6976744186046512
+      },
+      "SCC": {
+        "support": 28,
+        "precision": 0.18181818181818182,
+        "recall": 0.07142857142857142,
+        "f1": 0.10256410256410255
+      },
+      "SEK": {
+        "support": 28,
+        "precision": 0.47619047619047616,
+        "recall": 0.35714285714285715,
+        "f1": 0.40816326530612246
+      }
+    },
+    "confusion_matrix": [
+      [
+        66,
+        29,
+        0,
+        1,
+        4,
+        7
+      ],
+      [
+        17,
+        99,
+        0,
+        1,
+        4,
+        2
+      ],
+      [
+        0,
+        2,
+        2,
+        4,
+        0,
+        1
+      ],
+      [
+        4,
+        5,
+        0,
+        30,
+        0,
+        1
+      ],
+      [
+        12,
+        13,
+        0,
+        1,
+        2,
+        0
+      ],
+      [
+        4,
+        4,
+        0,
+        9,
+        1,
+        10
+      ]
+    ],
+    "loss": 0.5885131916003441
+  },
+  "class_names": [
+    "ACK",
+    "BCC",
+    "MEL",
+    "NEV",
+    "SCC",
+    "SEK"
+  ],
+  "training_class_counts": {
+    "ACK": 499,
+    "BCC": 608,
+    "MEL": 30,
+    "NEV": 164,
+    "SCC": 127,
+    "SEK": 164
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "backbone_learning_rate": 1e-05,
+  "head_learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "epochs_requested": 10,
+  "patience": 3,
+  "pretrained_weights": "ResNet18 ImageNet DEFAULT",
+  "training_mode": "layer4 and classification head fine-tuned",
+  "loss_function": "MulticlassFocalLoss",
+  "focal_gamma": 2.0,
+  "class_weighting": false,
+  "weighted_sampling": false,
+  "training_augmentation": true,
+  "device": "cpu"
+}

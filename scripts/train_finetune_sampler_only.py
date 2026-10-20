@@ -1,0 +1,495 @@
+from pathlib import Path
+import json
+import random
+
+import numpy as np
+import pandas as pd
+
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, WeightedRandomSampler
+from torchvision.models import resnet18, ResNet18_Weights
+
+
+from scripts.dermai_dataset import(
+    CLASS_TO_IDX,
+    DEFAULT_MANIFEST,
+    DermAIDataset,
+)
+
+
+SEED = 42
+BATCH_SIZE = 16
+NUM_WORKERS = 0
+
+
+EPOCHS = 10
+PATIENCE = 3
+
+BACKBONE_LEARNING_RATE = 1e-5
+HEAD_LEARNING_RATE = 1e-4
+WEIGHT_DECAY = 1e-4
+
+
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+CHECKPOINT_DIR = PROJECT_ROOT / "models" / "checkpoints"
+REPORT_DIR = PROJECT_ROOT / "reports" / "finetune_sampler_only"
+
+CHECKPOINT_PATH = CHECKPOINT_DIR / "resnet18_finetune_sampler_only.pt"
+
+CLASS_NAMES = [
+    name 
+    for name, index in sorted(
+        CLASS_TO_IDX.items(), 
+        key=lambda item: item[1],
+    )
+]
+
+
+# ImageNet normalization for pretrained ResNet18.
+MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
+STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    
+def calculate_metrics(
+    targets: list[int],
+    predictions: list[int],
+) -> dict:
+    num_classes = len(CLASS_NAMES)
+    confusion = torch.zeros(
+        num_classes, 
+        num_classes, 
+        dtype=torch.int64
+    )
+    
+    for target, prediction in zip(targets, predictions):
+        confusion[target, prediction] += 1
+        
+    per_class = {}
+    f1_values = []
+    recalls = []
+    
+    for index, name in enumerate(CLASS_NAMES):
+        tp = int(confusion[index, index])
+        actual = int(confusion[index, :].sum())
+        prediction = int(confusion[:, index].sum())
+        fp = prediction -tp
+        fn = actual - tp
+        
+        precision = tp / (tp + fp) if tp + fp else 0.0
+        recall = tp / (tp + fn) if tp + fn else 0.0
+        
+        f1 = (
+            2* precision * recall / (precision + recall)
+            if precision + recall else 0.0 
+        ) 
+        
+        per_class[name] = {
+            "support": actual,
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+        }
+        
+        f1_values.append(f1)
+        recalls.append(recall)
+        
+    total = int(confusion.sum())
+    accuracy = (
+        sum(int(confusion[i, i]) for i in range(num_classes)) / total
+        if total else 0.0
+    )
+    
+    return {
+        "accuracy": accuracy,
+        "macro_f1": sum(f1_values) / num_classes,
+        "balanced_accuracy": sum(recalls) / num_classes,
+        "per_class": per_class,
+        "confusion_matrix": confusion.tolist(),
+    }
+    
+def run_epoch(
+    model,          
+    loader,
+    criterion, 
+    optimizer, 
+    device,
+    training
+    ) -> dict:
+    
+    model.train(training)
+    total_loss = 0.0
+    target_all = []
+    predictions_all = []
+    
+    
+    context = (
+        torch.enable_grad() 
+        if training 
+        else torch.no_grad())
+    
+    with context:
+        for images, targets in loader:
+            images = images.to(device)
+            targets   = targets.to(device)
+            
+            images = (
+                images - MEAN.to(device)
+            ) / STD.to(device)
+            
+            if training:
+                optimizer.zero_grad(set_to_none = True)
+                
+            logits = model(images)
+            loss = criterion(logits, targets)
+            
+            if training: 
+                loss.backward()
+                optimizer.step()
+                
+            total_loss += loss.item() * images.size(0)
+            predictions = logits.argmax(dim=1)
+            
+            target_all.extend(targets.cpu().tolist())
+            predictions_all.extend(predictions.cpu().tolist())
+            
+            
+    metrics = calculate_metrics(target_all, predictions_all)
+    metrics["loss"] = total_loss / len(loader.dataset)
+    return metrics
+    
+def main() -> None:
+    
+    set_seed(SEED)
+    device = torch.device("cpu")
+    CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    
+    print(f"Device: {device}")
+    print(f"Classes: {CLASS_NAMES}")
+    print("Loading dataset splits...")
+    
+    train_dataset = DermAIDataset("train")
+    val_dataset = DermAIDataset("validation")
+    
+    if len(train_dataset) == 0:
+        raise ValueError("Training dataset is empty.")
+
+    if len(val_dataset) == 0:
+        raise ValueError("Validation dataset is empty.")
+    
+    
+    print("Preparing weighted sampler...")
+    
+    
+    train_labels = [
+        int(train_dataset[i][1])
+        for i in range(len(train_dataset))
+    ]
+    
+    label_counts = np.bincount(
+        train_labels,
+        minlength=len(CLASS_NAMES),
+    )
+    
+    if len(label_counts) != len(CLASS_NAMES):
+        raise ValueError(
+            "Unexpected number of class counts."
+        )
+
+    if (label_counts == 0).any():
+        raise ValueError(
+            "At least one class has no training examples."
+        )
+    
+    sample_weights = [
+        1.0/ label_counts[label]
+        for label in train_labels
+    ]
+    
+    sample_generator = torch.Generator()
+    sample_generator.manual_seed(SEED)
+    
+    train_sampler = WeightedRandomSampler(
+        weights= torch.as_tensor(sample_weights, dtype=torch.double),
+        num_samples=len(train_dataset),
+        replacement=True,
+        generator=sample_generator,
+    )
+    
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        sampler=train_sampler,
+        num_workers=NUM_WORKERS,
+    )
+    
+
+    val_loader  = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+    )
+    
+    print(
+        "Training class counts "
+        f"(class-index order): {label_counts.tolist()}"
+    )
+    print("Weighted sampling enabled.")
+    print(f"Training samples per epoch: {len(train_dataset)}")
+    print(f"Validation samples: {len(val_dataset)}")
+    
+    
+    # manifest = pd.read_csv(DEFAULT_MANIFEST)
+    # train_rows = manifest[manifest["split"] == "train"]
+    # counts = (
+    #     train_rows["diagnostic"]
+    #     .value_counts()
+    #     .reindex(CLASS_NAMES, fill_value=0)
+    # )
+        
+    # if (counts == 0).any():
+    #     raise ValueError("A class has no training examples.")
+    
+    # weights = len(train_rows) / (
+    #     len(CLASS_NAMES)* counts.to_numpy(dtype=np.float64)
+    # )
+    
+    # class_weights = torch.tensor(weights, dtype=torch.float32, device=device)
+    
+    
+    # print("Manifest training class counts:", counts.to_dict())
+
+    # print(
+    #     "Loss class weights:",
+    #     {
+    #         name: round(float(weight), 3)
+    #         for name, weight in zip(
+    #             CLASS_NAMES,
+    #             class_weights.cpu(),
+    #         )
+    #     },
+    # )
+    
+    print("Loading ImageNet-pretrained ResNet18...")
+   
+    model = resnet18(weights=ResNet18_Weights.DEFAULT)
+    
+    
+    for parameter in model.parameters():
+        parameter.requires_grad = False
+        
+    for parameter in model.layer4.parameters():
+        parameter.requires_grad = True
+        
+    model.fc = nn.Linear(model.fc.in_features, len(CLASS_NAMES))
+    model = model.to(device)
+    
+    trainable_names = [
+        name
+        for name, parameter in model.named_parameters()
+        if parameter.requires_grad
+    ]
+    
+    
+    print("\nTrainable parameters:")
+    for name in trainable_names:
+        print(f"  {name}")
+
+    assert trainable_names, (
+        "No trainable parameters were found."
+    )
+
+    assert all(
+        name.startswith("layer4.")
+        or name.startswith("fc.")
+        for name in trainable_names
+    ), "Unexpected trainable parameters detected."
+
+    assert any(
+        name.startswith("layer4.")
+        for name in trainable_names
+    ), "layer4 is not trainable."
+
+    assert any(
+        name.startswith("fc.")
+        for name in trainable_names
+    ), "Classification head is not trainable."
+    
+    
+    
+    
+    criterion = nn.CrossEntropyLoss()
+    
+    
+    optimizer = torch.optim.AdamW(
+       [
+           {
+               "params":list( model.layer4.parameters()),
+               "lr" : BACKBONE_LEARNING_RATE
+           },
+           {
+               "params" : list(model.fc.parameters()),
+               "lr" : HEAD_LEARNING_RATE,
+           },
+       ],
+       weight_decay=WEIGHT_DECAY,
+    )
+    
+    best_macro_f1 = -1.0
+    best_epoch = 0
+    epochs_without_improvement = 0
+    history = []
+    
+    for epoch in range(1, EPOCHS + 1):
+        train_metrics = run_epoch(
+            model, train_loader, criterion, optimizer, device, training=True,
+        )
+        val_metrics = run_epoch(
+            model, val_loader, criterion, optimizer, device, training=False
+        )
+
+        record = {
+                "epoch": epoch,
+                "train_loss": train_metrics["loss"],
+                "train_accuracy": train_metrics["accuracy"],
+                "train_macro_f1": train_metrics["macro_f1"],
+                "val_loss": val_metrics["loss"],
+                "val_accuracy": val_metrics["accuracy"],
+                "val_macro_f1": val_metrics["macro_f1"],
+                "val_balanced_accuracy": (
+                    val_metrics["balanced_accuracy"]
+                ),
+        }
+        
+        history.append(record)
+
+        print(
+            f"Epoch {epoch:02d}/{EPOCHS} | "
+            f"train loss {train_metrics['loss']:.4f} | "
+            f"train acc {train_metrics['accuracy']:.4f} | "
+            f"val loss {val_metrics['loss']:.4f} | "
+            f"val acc {val_metrics['accuracy']:.4f} | "
+            f"val macro-F1 {val_metrics['macro_f1']:.4f}"
+        )
+
+        if val_metrics["macro_f1"] > best_macro_f1:
+            best_macro_f1 = val_metrics["macro_f1"]
+            best_epoch = epoch
+            epochs_without_improvement = 0
+
+            torch.save(
+                {
+                    "model_state_dict": model.state_dict(),
+                    "class_to_idx": CLASS_TO_IDX,
+                    "class_names": CLASS_NAMES,
+                    "epoch": epoch,
+                    "val_macro_f1": best_macro_f1,
+                    "seed": SEED,
+                    "normalization_mean": MEAN.flatten().tolist(),
+                    "normalization_std": STD.flatten().tolist(),
+                    "training_mode": (
+                        "layer4 and classification head fine-tuned"
+                    ),
+                },
+                CHECKPOINT_PATH,
+            )
+            print(f"  Saved best checkpoint: {CHECKPOINT_PATH}")
+        else:
+            epochs_without_improvement += 1
+
+        if epochs_without_improvement >= PATIENCE:
+            print("Early stopping: validation macro-F1 did not improve.")
+            break
+
+    # Reload the best checkpoint and report its validation metrics.
+    checkpoint = torch.load(
+        CHECKPOINT_PATH, map_location=device, weights_only=True
+    )
+    model.load_state_dict(checkpoint["model_state_dict"])
+    best_val_metrics = run_epoch(
+        model, val_loader, criterion, optimizer, device, training=False,
+    )
+
+    history_path =  REPORT_DIR / "training_history.csv"
+    
+    pd.DataFrame(history).to_csv(
+        history_path,
+        index=False
+    )
+    
+    report = {
+        "experiment": (
+            "ResNet18 fine-tuning with weighted sampler "
+            "and ordinary cross-entropy loss"
+        ),
+        "best_epoch": best_epoch,
+        "best_validation_metrics": best_val_metrics,
+        "class_names": CLASS_NAMES,
+        "training_class_counts": {
+            name: int(label_counts[index])
+            for index, name in enumerate(CLASS_NAMES)
+        },
+        "sampler_class_counts": {
+            name: int(label_counts[index])
+            for index, name in enumerate(CLASS_NAMES)
+        },
+        "sampling_strategy": "WeightedRandomSampler",
+        "sampler_replacement": True,
+        "sampler_num_samples": len(train_dataset),
+        "weighted_loss_enabled": False,
+        "seed": SEED,
+        "batch_size": BATCH_SIZE,
+        "backbone_learning_rate": BACKBONE_LEARNING_RATE,
+        "head_learning_rate": HEAD_LEARNING_RATE,
+        "weight_decay": WEIGHT_DECAY,
+        "epochs_requested": EPOCHS,
+        "patience": PATIENCE,
+        "pretrained_weights": "ResNet18 ImageNet DEFAULT",
+        "training_mode": (
+            "layer4 and classification head fine-tuned"
+        ),
+        "checkpoint_path": str(CHECKPOINT_PATH),
+        "training_history_path": str(history_path),
+        "note": (
+            "Validation metrics are calculated on the original "
+            "validation distribution. Training metrics reflect "
+            "weighted sampling."
+        ),
+    }
+    
+    report_path =  REPORT_DIR / "validation_metrics.json"
+
+    with open(
+        report_path, 
+        "w",
+        encoding="utf-8",
+    ) as file:
+        json.dump(
+            report,
+            file,
+            indent=2,
+        )
+
+    print("\nFine-tuning sampler experiment complete.")
+    print(f"Best epoch: {best_epoch}")
+    print(
+        f"Best validation macro-F1: {best_macro_f1:.4f}"
+    )
+    print(f"Checkpoint: {CHECKPOINT_PATH}")
+    print(f"Training history: {history_path}")
+    print(f"Validation report: {report_path}")
+
+
+if __name__ == "__main__":
+    main()

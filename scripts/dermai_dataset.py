@@ -2,6 +2,9 @@ from pathlib import Path
 
 import pandas as pd
 import torch
+import random
+
+from torchvision.transforms import ColorJitter
 from torch.utils.data import Dataset
 from torchvision.transforms import functional as TF
 
@@ -77,6 +80,7 @@ class DermAIDataset(Dataset):
         split: str,
         manifest_path: str | Path = DEFAULT_MANIFEST,
         image_root: str | Path = DEFAULT_IMAGE_ROOT,
+        augment: bool | None = None,
     ) -> None:
         if split not in VALID_SPLITS:
             raise ValueError(f"Invalid split: {split}")
@@ -104,6 +108,11 @@ class DermAIDataset(Dataset):
         
         self.split = split
         
+        self.augment = (split == "train") if augment is None else augment
+        
+        if self.augment and split != "train":
+            raise ValueError("Augmentation is allowed only for the training split.")
+        
         if self.records.empty:
                 raise ValueError(f"No records found for split: {split}")
             
@@ -129,6 +138,26 @@ class DermAIDataset(Dataset):
         image_array = preprocess_image(image_path, size=(224,224))
         
         image = torch.from_numpy(image_array).permute(2, 0, 1).contiguous()
+        
+        if self.augment:
+            if random.random() < 0.5:
+                image = TF.hflip(image)
+                
+                
+            angle = random.uniform(-15.0, 15.0)
+            image = TF.rotate(
+                image,
+                angle=angle,
+                interpolation= TF.InterpolationMode.BILINEAR,
+            )
+            
+            image = ColorJitter(
+                brightness=0.10,
+                contrast=0.10,
+            )(image)
+            
+            image = image.clamp(0.0, 1.0)
+            
         
         label = CLASS_TO_IDX[row["diagnostic"]]
         target = torch.tensor(label, dtype=torch.long)

@@ -1,0 +1,122 @@
+{
+  "best_epoch": 8,
+  "best_validation_metrics": {
+    "accuracy": 0.5492537313432836,
+    "macro_f1": 0.5294314488983424,
+    "balanced_accuracy": 0.5266212070776694,
+    "per_class": {
+      "ACK": {
+        "support": 107,
+        "precision": 0.5957446808510638,
+        "recall": 0.5233644859813084,
+        "f1": 0.5572139303482586
+      },
+      "BCC": {
+        "support": 123,
+        "precision": 0.6454545454545455,
+        "recall": 0.5772357723577236,
+        "f1": 0.609442060085837
+      },
+      "MEL": {
+        "support": 9,
+        "precision": 0.8333333333333334,
+        "recall": 0.5555555555555556,
+        "f1": 0.6666666666666667
+      },
+      "NEV": {
+        "support": 40,
+        "precision": 0.717391304347826,
+        "recall": 0.825,
+        "f1": 0.7674418604651162
+      },
+      "SCC": {
+        "support": 28,
+        "precision": 0.09523809523809523,
+        "recall": 0.14285714285714285,
+        "f1": 0.11428571428571427
+      },
+      "SEK": {
+        "support": 28,
+        "precision": 0.40540540540540543,
+        "recall": 0.5357142857142857,
+        "f1": 0.46153846153846156
+      }
+    },
+    "confusion_matrix": [
+      [
+        56,
+        23,
+        0,
+        1,
+        13,
+        14
+      ],
+      [
+        22,
+        71,
+        0,
+        2,
+        25,
+        3
+      ],
+      [
+        0,
+        1,
+        5,
+        2,
+        0,
+        1
+      ],
+      [
+        2,
+        2,
+        1,
+        33,
+        0,
+        2
+      ],
+      [
+        13,
+        8,
+        0,
+        1,
+        4,
+        2
+      ],
+      [
+        1,
+        5,
+        0,
+        7,
+        0,
+        15
+      ]
+    ],
+    "loss": 1.2481854111401003
+  },
+  "class_names": [
+    "ACK",
+    "BCC",
+    "MEL",
+    "NEV",
+    "SCC",
+    "SEK"
+  ],
+  "training_class_counts": {
+    "ACK": 499,
+    "BCC": 608,
+    "MEL": 30,
+    "NEV": 164,
+    "SCC": 127,
+    "SEK": 164
+  },
+  "seed": 42,
+  "batch_size": 16,
+  "backbone_learning_rate": 1e-05,
+  "head_learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "epochs_requested": 10,
+  "patience": 3,
+  "pretrained_weights": "ResNet18 ImageNet DEFAULT",
+  "training_mode": "layer4 and classification head fine-tuned"
+}

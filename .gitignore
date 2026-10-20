@@ -1,36 +1,38 @@
+# Python environment
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Test and tooling cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Secrets
 .env
 .env.*
 !.env.example
 
+# Local databases and logs
+*.sqlite3
+*.db
+*.log
 
-# DermAI datasets and image data
+# Dataset files
 datasets/
 data/
 
-# PowerShell-generated cache
+# Model checkpoints — keep local unless deliberately using Git LFS
+models/checkpoints/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Local PowerShell cache accidentally created in project
 Microsoft/
 
-# Python
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-
-# Jupyter
-.ipynb_checkpoints/
-
-# Frontend
-node_modules/
-dist/
-build/
-
-```gitignore
-# DermAI uploaded images
+# User-uploaded images and local upload data
 backend/uploads/
-
-# Python cache and test artifacts
-__pycache__/
-*.py[cod]
-.pytest_cache/
-```
