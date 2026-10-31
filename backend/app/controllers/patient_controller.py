@@ -52,12 +52,18 @@ def create_patient_controller(
 def list_patients_controller(
     db:Session,
     current_user: User,
+    offset: int = 0,
+    limit: int = 20,
+    search: str | None = None,
 ):
     try:
         
         return get_patient_by_clinician(
             db=db,
             clinician_id=current_user.id,
+            offset=offset,
+            limit=limit,
+            search=search,
         )
         
     except HTTPException:

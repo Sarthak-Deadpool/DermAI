@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -19,9 +19,13 @@ def create_patient(
     
     try:
         patient = Patient(
-            name=patient_data.name,
+            patient_code=f"PAT-{uuid4().hex.upper()}",
+            patient_name=patient_data.patient_name,
             age= patient_data.age,
             gender=patient_data.gender,
+            medical_history=patient_data.medical_history,
+            known_allergies=patient_data.known_allergies,
+            fitzpatrick_type=patient_data.fitzpatrick_type,
             clinician_id=clinician_id,
             user_id = None,
     
@@ -62,12 +66,15 @@ def get_patient_by_id(
 def get_patient_by_clinician(
     db:Session,
     clinician_id:UUID,
+    offset: int = 0,
+    limit: int = 20,
+    search: str | None = None,
 ) -> list[Patient]:
     
     repository = PatientRepository(db)
     
     try:
-        return repository.get_patient_by_clinician(clinician_id)
+        return repository.get_patient_by_clinician(clinician_id, offset, limit, search)
     
     except SQLAlchemyError as exc:
         db.rollback()
@@ -164,18 +171,33 @@ def create_user_patient(
 ) -> Patient:
     repository = PatientRepository(db)
     try:
-        existing_patient = repository.get_patient_by_user(user_id)
+        existing_patient = repository.get_patient_by_user(user_id, include_archived=True)
         
-        if existing_patient is not None :
+        if existing_patient is not None and existing_patient.archived_at is None:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="You already have a patient profile.",
             )
             
+        if existing_patient is not None:
+            existing_patient.archived_at = None
+            if patient_data.patient_name is not None:
+                existing_patient.patient_name = patient_data.patient_name
+            existing_patient.age = patient_data.age
+            existing_patient.gender = patient_data.gender
+            existing_patient.medical_history = patient_data.medical_history
+            existing_patient.known_allergies = patient_data.known_allergies
+            existing_patient.fitzpatrick_type = patient_data.fitzpatrick_type
+            return repository.update_patient(existing_patient)
+
         patient  = Patient(
-            name = patient_data.name,
+            patient_code=f"PAT-{uuid4().hex.upper()}",
+            patient_name=patient_data.patient_name,
             age = patient_data.age,
             gender = patient_data.gender,
+            medical_history=patient_data.medical_history,
+            known_allergies=patient_data.known_allergies,
+            fitzpatrick_type=patient_data.fitzpatrick_type,
             user_id = user_id,
             clinician_id = None,
         ) 

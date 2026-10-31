@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
 
-from app.models.case import Case
+from app.models.case import Case, CaseEvent
 from app.schemas.case import CaseCreate
 
 
@@ -21,6 +21,8 @@ def create_case(
             owner_user_id=owner_user_id,
         )
         db.add(new_case)
+        db.flush()
+        db.add(CaseEvent(case_id=new_case.id, actor_user_id=owner_user_id, event_type="case_created"))
         db.commit()
         db.refresh(new_case)
         return new_case
@@ -33,13 +35,14 @@ def create_case(
 def get_cases_by_owner(
     db:Session,
     owner_user_id:UUID,
+    offset: int = 0,
+    limit: int = 20,
+    status_filter: str | None = None,
 ) -> list[Case]:
-    statement = (
-        select(Case)
-        .where(Case.owner_user_id == owner_user_id)
-        .order_by(Case.created_at.desc())
-    )
-    
+    statement = select(Case).where(Case.owner_user_id == owner_user_id)
+    if status_filter:
+        statement = statement.where(Case.status == status_filter)
+    statement = statement.order_by(Case.created_at.desc()).offset(offset).limit(limit)
     return list(db.scalars(statement).all())
 
 def get_case_by_id_and_owner(
@@ -69,4 +72,4 @@ def get_cases_by_patient(
         .order_by(Case.created_at.desc())
     )
     
-    return list(db.scalar(statement).all())
+    return list(db.scalars(statement).all())

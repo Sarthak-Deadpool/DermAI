@@ -1,7 +1,7 @@
 import uuid
 import enum
 
-from sqlalchemy import DateTime, Enum as SQLAlchemyEnum, String, func
+from sqlalchemy import Boolean, DateTime, Enum as SQLAlchemyEnum, String, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -11,9 +11,12 @@ from app.db.database import Base
 
 class UserRole(str, enum.Enum):
     USER = "user"
+    # Roadmap vocabulary aliases; stored values remain backward compatible.
+    PATIENT_USER = "user"
     CLINICIAN = "clinician"
     RESEARCHER = "researcher"
     DATA_SCIENTIST = "data_scientist"
+    ML_ENGINEER = "data_scientist"
     ADMIN = "admin"
 
 class User(Base):
@@ -56,6 +59,8 @@ class User(Base):
         default=UserRole.USER,
         nullable=False,
     )
+
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     created_at: Mapped[DateTime] = mapped_column(
         DateTime(timezone=True),

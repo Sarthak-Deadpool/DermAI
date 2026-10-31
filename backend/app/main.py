@@ -7,12 +7,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.db.database import Base, engine
+from app.core.config import settings
+from app.db.database import engine, SessionLocal
 
 from app.models.user import User
-from app.models.case import Case
+from app.models.case import Case, CaseNote, CaseEvent
 from app.models.image import Image
 from app.models.revoked_token import RevokedToken
+from app.models.audit_log import AuditLog
+from app.models.auth_rate_limit import AuthRateLimitBucket
 
 from app.middleware.csrf import csrf_middleware
 
@@ -25,7 +28,6 @@ from app.routes.patient import router as patients_router
 
 @asynccontextmanager
 async def lifespan(app : FastAPI):
-    Base.metadata.create_all(bind=engine)
     yield
 
 app = FastAPI(
@@ -34,12 +36,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.state.session_factory = SessionLocal
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=settings.trusted_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"]
+    allow_methods=settings.cors_allowed_methods,
+    allow_headers=settings.cors_allowed_headers,
+    max_age=settings.CORS_PREFLIGHT_MAX_AGE_SECONDS,
 )
 
 app.middleware("http")(csrf_middleware)

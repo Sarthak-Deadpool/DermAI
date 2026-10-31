@@ -1,22 +1,26 @@
 import uuid
+import hashlib
 from io import BytesIO
 from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
-from PIL import Image as PILImage, UnidentifiedImageError
+from PIL import Image as PILImage, ImageOps, UnidentifiedImageError
 from sqlalchemy.orm import Session
 
 
-from app.models.case import Case
+from app.models.case import Case, CaseEvent
 from app.models.image import Image
 from app.repositories.image_repository import create_image
+from app.core.config import settings
+from app.services.case_service import transition_case_status
+from app.services.image_cleanup import cleanup_uploaded_file
 
 
 #upload configuration
 
-MAX_FILE_SIZE = 20*1024*1024
-MAX_IMAGE_PIXELS = 25_000_000
+MAX_FILE_SIZE = settings.MAX_UPLOAD_BYTES
+MAX_IMAGE_PIXELS = settings.MAX_IMAGE_PIXELS
 ALLOWED_FORMATS = {
     "JPEG" : "image/jpeg",
     "PNG" : "image/png",
@@ -77,15 +81,13 @@ def upload_case_image(
         if len(content) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-                detail="Maximum image size is 20 MB",
+                detail=f"Maximum image size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
             )
             
         try:
             with PILImage.open(BytesIO(content)) as image:
                 actual_format = image.format
-                width, height  =  image.size
-                
-                
+                width, height = image.size
                 if actual_format not in ALLOWED_FORMATS:
                     raise HTTPException(
                         status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
@@ -97,14 +99,28 @@ def upload_case_image(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Invalid image dimensions",
                     )
+
+                if min(width, height) < settings.MIN_IMAGE_SIDE:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail=f"Image sides must be at least {settings.MIN_IMAGE_SIDE} pixels",
+                    )
                      
                 if width * height > MAX_IMAGE_PIXELS:
                     raise HTTPException(
                         status_code=status.HTTP_413_CONTENT_TOO_LARGE,
                         detail="Image dimensions are too large",
                     )
-                    
                 image.verify()
+
+            with PILImage.open(BytesIO(content)) as image:
+                oriented = ImageOps.exif_transpose(image)
+                width, height = oriented.size
+            if min(width, height) < settings.MIN_IMAGE_SIDE:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Image sides must be at least {settings.MIN_IMAGE_SIDE} pixels",
+                )
             
         except HTTPException:
             raise
@@ -129,6 +145,18 @@ def upload_case_image(
                 detail="File content does not match its declared content type",
             )
             
+        # Re-encode after orientation correction. This strips GPS and other
+        # source EXIF metadata from the stored image.
+        sanitized = BytesIO()
+        with PILImage.open(BytesIO(content)) as source:
+            oriented = ImageOps.exif_transpose(source).convert("RGB")
+            if actual_format == "JPEG":
+                oriented.save(sanitized, format="JPEG", quality=95, optimize=True, exif=b"")
+            else:
+                oriented.save(sanitized, format="PNG", optimize=True)
+        stored_content = sanitized.getvalue()
+        digest = hashlib.sha256(stored_content).hexdigest()
+
         extension = ".jpg" if actual_format == "JPEG" else ".png"
         safe_filename = f"{uuid.uuid4().hex}{extension}"
         
@@ -139,37 +167,33 @@ def upload_case_image(
         case_dir.mkdir(parents=True, exist_ok=True)
         
         with file_path.open("xb") as destination:
-            destination.write(content)
+            destination.write(stored_content)
             
         image_data = {
             "case_id": case_id,
             "file_path": str(file_path.resolve()),
-            "original_filename": (file.filename or "upload")[:255],
+            "original_filename": "upload",
             "content_type": expected_type,
-            "file_size": len(content),
+            "file_size": len(stored_content),
+            "width": width,
+            "height": height,
+            "sha256": digest,
         }
-        
-        return create_image(db, image_data)
-    
-    except HTTPException:
-        db.rollback()
-        
-        if file_path is not None:
-            try:
-                file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
-        
-        raise
+
+        # Keep the image row, case status, and event in one DB transaction.
+        # The filesystem write is compensated below if this transaction fails.
+        stored_image = create_image(db, image_data)
+        transition_case_status(
+            db, case, "image_uploaded", owner_user_id, record_same_status=True
+        )
+        db.commit()
+        return stored_image
     
     except Exception:
         db.rollback()
         
         if file_path is not None:
-            try:
-                file_path.unlink(missing_ok=True)
-            except OSError:
-                pass
+            cleanup_uploaded_file(file_path)
             
         raise
     
@@ -177,4 +201,4 @@ def upload_case_image(
         file.file.close()
         
         
-   
+

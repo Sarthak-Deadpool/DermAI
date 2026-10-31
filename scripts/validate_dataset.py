@@ -6,7 +6,7 @@ from scripts.dermai_dataset import DermAIDataset, CLASS_TO_IDX
 for split in ["train", "validation", "test"]:
     dataset = DermAIDataset(split)
     counts = Counter()
-    
+
     print(f"\nChecking {split} split ({len(dataset)} images)...")
     
     for index in range(len(dataset)):
@@ -14,8 +14,7 @@ for split in ["train", "validation", "test"]:
         
         assert tuple(image.shape) == (3 , 224, 224)
         assert image.isfinite().all()
-        assert image.min().item() >= 0
-        assert image.max().item() <= 1
+        assert image.min().item() < 0
         
         label_id = label.item()
         assert label_id in CLASS_TO_IDX.values()
@@ -25,4 +24,3 @@ for split in ["train", "validation", "test"]:
     print(f"Class counts by index: {dict(sorted(counts.items()))}")
 
 print("\nFull dataset validation passed!")
-    

@@ -7,7 +7,7 @@ from app.models.user import User
 
 
 from app.schemas.user import UserRegister, UserResponse, UserLogin
-from app.services.auth_service import register_user, login_user, logout_user
+from app.services.auth_service import register_user, login_user
 
 
 def register_controller(
@@ -43,16 +43,22 @@ def register_controller(
 def login_controller(
         db: Session,
         user_data: UserLogin,
-) -> tuple[str, User] :
+) -> User:
 
     try:
 
         return  login_user(db, user_data)
 
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password",
+        ) from exc
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Inavalid email or password",
+            detail="Invalid email or password",
         ) from exc
     except SQLAlchemyError as exc:
         db.rollback()
@@ -60,25 +66,3 @@ def login_controller(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed",
         ) from exc
-
-
-def logout_controller(
-    db: Session,
-    access_token: str
-) -> None:
-    try:
-        logout_user(db, access_token)
-
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token",
-        ) from exc
-
-    except SQLAlchemyError as exc:
-     db.rollback()
-
-     raise HTTPException(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        detail="Logout failed",
-    ) from exc

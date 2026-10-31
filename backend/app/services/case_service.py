@@ -6,7 +6,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 
-from app.models.case import Case
+from app.models.case import Case, CaseEvent
+from app.models.image import Image
 from app.models.patient import Patient
 
 from app.repositories.case_repository import (
@@ -17,6 +18,56 @@ from app.repositories.case_repository import (
 )
 
 from app.schemas.case import CaseCreate
+
+
+M1_CASE_STATUSES = {"created", "image_uploaded"}
+M2_CASE_STATUSES = {"quality_assessed", "analysis_pending", "analyzed"}
+
+
+def transition_case_status(
+    db: Session,
+    case: Case,
+    new_status: str,
+    actor_user_id: UUID,
+    *,
+    record_same_status: bool = False,
+) -> None:
+    """Apply only evidence-backed M1 state changes; caller owns transaction."""
+    if new_status in M2_CASE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Status '{new_status}' is unavailable until its M2 artifact exists.",
+        )
+    if new_status not in M1_CASE_STATUSES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Unsupported case status transition.",
+        )
+    if case.status == new_status:
+        if record_same_status and new_status == "image_uploaded":
+            db.add(CaseEvent(
+                case_id=case.id,
+                actor_user_id=actor_user_id,
+                event_type="image_uploaded",
+            ))
+        return
+    if case.status != "created" or new_status != "image_uploaded":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot change case status from {case.status} to {new_status}.",
+        )
+    has_image = db.query(Image.id).filter(Image.case_id == case.id).first() is not None
+    if not has_image:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An image must be attached before the case can enter image_uploaded.",
+        )
+    case.status = new_status
+    db.add(CaseEvent(
+        case_id=case.id,
+        actor_user_id=actor_user_id,
+        event_type="image_uploaded",
+    ))
 
 def validate_patient_access(
     db:Session,
@@ -87,11 +138,14 @@ def create_new_case(
 def list_user_cases(
     db:Session,
     owner_user_id:UUID,
+    offset: int = 0,
+    limit: int = 20,
+    status_filter: str | None = None,
 ) -> list[Case]:
     
     try:
         
-        return get_cases_by_owner(db, owner_user_id)
+        return get_cases_by_owner(db, owner_user_id, offset, limit, status_filter)
     
     except SQLAlchemyError as exc:
         raise HTTPException(

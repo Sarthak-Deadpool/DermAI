@@ -45,6 +45,10 @@ class Image(Base):
         nullable=False,
     )
 
+    width: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    height: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+
     created_at:Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

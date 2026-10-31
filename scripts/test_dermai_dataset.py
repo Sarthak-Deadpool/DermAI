@@ -40,8 +40,7 @@ def test_real_image_and_label():
     assert image.shape == (3, 224, 224)
     assert image.dtype == torch.float32
     assert torch.isfinite(image).all()
-    assert image.min() >= 0
-    assert image.max() <= 1
+    assert image.min() < 0
     assert label.dtype == torch.long
     assert 0 <= label.item() < len(CLASS_TO_IDX)
 

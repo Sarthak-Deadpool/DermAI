@@ -1,5 +1,7 @@
 import secrets
 import hmac
+import hashlib
+import base64
 
 from itsdangerous import BadSignature, URLSafeTimedSerializer
 
@@ -18,6 +20,22 @@ def _get_serializer() -> URLSafeTimedSerializer:
 def create_csrf_token() -> str:
     random_value = secrets.token_urlsafe(32)
     return _get_serializer().dumps(random_value)
+
+
+def create_session_csrf_token(session_id: str) -> str:
+    """Derive a deterministic token bound to one opaque browser session."""
+    if not session_id:
+        raise ValueError("Session identifier must not be empty")
+    message = b"dermai-session-csrf-v1:" + session_id.encode("utf-8")
+    digest = hmac.new(settings.CSRF_SECRET_KEY.encode("utf-8"), message, hashlib.sha256).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def validate_session_csrf_token(submitted_token: str, session_id: str) -> bool:
+    if not submitted_token or not session_id:
+        return False
+    expected = create_session_csrf_token(session_id)
+    return hmac.compare_digest(submitted_token, expected)
 
 
 def validate_csrf_token(submitted_token : str,

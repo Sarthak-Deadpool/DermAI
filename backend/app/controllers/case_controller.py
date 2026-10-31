@@ -49,12 +49,18 @@ def create_case_controller(
 def list_cases_controller(
     db:Session,
     current_user: User,
+    offset: int = 0,
+    limit: int = 20,
+    status_filter: str | None = None,
 ):
     try:
         
         return list_user_cases(
             db=db,
             owner_user_id=current_user.id,
+            offset=offset,
+            limit=limit,
+            status_filter=status_filter,
         )
         
     except HTTPException:

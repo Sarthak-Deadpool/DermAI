@@ -13,6 +13,7 @@ from torchvision.models import resnet18, ResNet18_Weights
 
 from scripts.dermai_dataset import(
     CLASS_TO_IDX,
+    DEFAULT_PREPROCESS_CONFIG,
     DEFAULT_MANIFEST,
     DermAIDataset,
 )
@@ -38,8 +39,8 @@ CLASS_NAMES = [
 
 
 # ImageNet normalization for pretrained ResNet18.
-MEAN = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1)
-STD = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1)
+MEAN = torch.tensor(DEFAULT_PREPROCESS_CONFIG.mean)
+STD = torch.tensor(DEFAULT_PREPROCESS_CONFIG.std)
 
 
 
@@ -116,10 +117,6 @@ def run_epoch(model, loader, criterion, optimizer, device, training):
         for images, targets in loader:
             images = images.to(device)
             targets   = targets.to(device)
-            
-            images = (
-                images - MEAN.to(device)
-            ) / STD.to(device)
             
             if training:
                 optimizer.zero_grad(set_to_none = True)
@@ -257,6 +254,7 @@ def main() -> None:
                     "seed": SEED,
                     "normalization_mean": MEAN.flatten().tolist(),
                     "normalization_std": STD.flatten().tolist(),
+                    "preprocess_version": "m1.2-imagenet-rgb224",
                 },
                 CHECKPOINT_PATH,
             )

@@ -1,575 +1,86 @@
-/** @format */
-
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import {
-  Activity,
-  AlertCircle,
-  ArrowRight,
-  CalendarDays,
-  CheckCircle2,
-  Clock3,
-  FileText,
-  FolderOpen,
-  Plus,
-  RefreshCw,
-  Search,
-  SlidersHorizontal,
-} from "lucide-react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowRight, CalendarDays, ClipboardList, ImagePlus, Plus, Search } from "lucide-react";
+import { caseApi, patientApi } from "../api/services";
+import { errorMessage } from "../api/client";
+import { useAuth } from "../state/AuthContext";
+import { Button, EmptyState, Loading, Notice, PageTitle, SearchField, SelectField } from "../components/ui";
 
-import Sidebar from "../components/sidebar/Sidebar";
-import { getCases } from "../services/caseService";
-
-function formatDate(value) {
-  if (!value) return "Date unavailable";
-
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return "Date unavailable";
-
-  return new Intl.DateTimeFormat("en", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-function getCaseId(item) {
-  return item.case_id ?? item.caseId ?? item.id ?? item._id;
-}
-
-function getCaseTitle(item) {
-  return (
-    item.title ??
-    item.case_name ??
-    item.name ??
-    `Case ${getCaseId(item) ?? ""}`.trim()
-  );
-}
-
-function getCaseDate(item) {
-  return (
-    item.created_at ??
-    item.createdAt ??
-    item.capture_date ??
-    item.image_capture_date ??
-    item.updated_at
-  );
-}
-
-function getCaseStatus(item) {
-  return String(item.analysis_status ?? item.status ?? "pending").toLowerCase();
-}
-
-function getStatusStyle(status) {
-  if (["completed", "complete", "success"].includes(status)) {
-    return {
-      label: "Completed",
-      className: "bg-emerald-50 text-emerald-700 ring-emerald-600/15",
-      Icon: CheckCircle2,
-    };
-  }
-
-  if (["failed", "error", "rejected"].includes(status)) {
-    return {
-      label: status === "rejected" ? "Rejected" : "Failed",
-      className: "bg-red-50 text-red-700 ring-red-600/15",
-      Icon: AlertCircle,
-    };
-  }
-
-  if (
-    ["processing", "in_progress", "in progress", "running"].includes(status)
-  ) {
-    return {
-      label: "Processing",
-      className: "bg-blue-50 text-blue-700 ring-blue-600/15",
-      Icon: RefreshCw,
-    };
-  }
-
-  return {
-    label: "Pending",
-    className: "bg-amber-50 text-amber-700 ring-amber-600/15",
-    Icon: Clock3,
-  };
-}
-
-function normalizeCases(data) {
-  // Supports common API response shapes.
-  // Adjust this if your backend returns a different schema.
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.cases)) return data.cases;
-  if (Array.isArray(data?.items)) return data.items;
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.data)) return data.data;
-
-  return [];
-}
+const dateLabel = (value) => value ? new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(value)) : "—";
 
 export default function CasesPage() {
+  const { user } = useAuth();
   const [cases, setCases] = useState([]);
+  const [patients, setPatients] = useState([]);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [hasNext, setHasNext] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
 
-  async function loadCases() {
-    setLoading(true);
-    setError("");
-
+  async function load() {
+    setLoading(true); setError("");
     try {
-      const response = await getCases();
-      setCases(normalizeCases(response));
-    } catch (err) {
-      setError(
-        err.response?.status === 401
-          ? "Your session may have expired. Please sign in again."
-          : (err.response?.data?.detail ??
-              "We couldn't load your cases. Please try again."),
-      );
-    } finally {
-      setLoading(false);
-    }
+      const result = await caseApi.list({ offset, limit: 20, ...(status ? { status } : {}) });
+      setCases(result); setHasNext(result.length === 20);
+    } catch (err) { setError(errorMessage(err, "Could not load cases.")); }
+    finally { setLoading(false); }
   }
-
   useEffect(() => {
-    loadCases();
-  }, []);
+    let active = true;
+    caseApi.list({ offset, limit: 20, ...(status ? { status } : {}) }).then((result) => { if (active) { setCases(result); setHasNext(result.length === 20); } }).catch((err) => { if (active) setError(errorMessage(err, "Could not load cases.")); }).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [offset, status]);
+  useEffect(() => {
+    if (user?.role !== "clinician") return;
+    let active = true;
+    patientApi.list({ limit: 100 }).then((result) => { if (active) setPatients(result); }).catch(() => {});
+    return () => { active = false; };
+  }, [user?.role]);
+  const patientNames = useMemo(() => Object.fromEntries(patients.map((patient) => [patient.id, patient.patient_name || patient.patient_code])), [patients]);
+  const filtered = cases.filter((item) => `${item.case_label || ""} ${item.id} ${item.body_location || ""} ${patientNames[item.patient_id] || ""}`.toLowerCase().includes(search.toLowerCase()));
 
-  const filteredCases = useMemo(() => {
-    const query = search.trim().toLowerCase();
-
-    return cases.filter((item) => {
-      const id = String(getCaseId(item) ?? "");
-      const title = getCaseTitle(item).toLowerCase();
-      const status = getCaseStatus(item);
-
-      const matchesSearch =
-        !query || id.toLowerCase().includes(query) || title.includes(query);
-
-      const matchesStatus =
-        statusFilter === "all" ||
-        (statusFilter === "completed" &&
-          ["completed", "complete", "success"].includes(status)) ||
-        (statusFilter === "processing" &&
-          ["processing", "in_progress", "in progress", "running"].includes(
-            status,
-          )) ||
-        (statusFilter === "pending" &&
-          ![
-            "completed",
-            "complete",
-            "success",
-            "processing",
-            "in_progress",
-            "in progress",
-            "running",
-            "failed",
-            "error",
-            "rejected",
-          ].includes(status)) ||
-        (statusFilter === "failed" &&
-          ["failed", "error", "rejected"].includes(status));
-
-      return matchesSearch && matchesStatus;
-    });
-  }, [cases, search, statusFilter]);
-
-  const completedCount = cases.filter((item) =>
-    ["completed", "complete", "success"].includes(getCaseStatus(item)),
-  ).length;
-
-  const pendingCount = cases.filter((item) =>
-    ["pending", "queued"].includes(getCaseStatus(item)),
-  ).length;
-
-  return (
-    <div className="flex h-screen overflow-hidden bg-[#F7F9FC]">
-      <Sidebar role="user" />
-
-      <main className="min-w-0 flex-1 overflow-y-auto">
-        {/* Top bar */}
-        <header
-          className="sticky top-0 z-20 flex h-[72px]
-          items-center justify-between border-b border-slate-200/80
-          bg-white/90 px-5 backdrop-blur-md sm:px-8"
-        >
-          <div>
-            <p className="text-sm font-semibold text-slate-800">My Cases</p>
-            <p className="text-xs text-slate-500">
-              Manage your skin analysis cases
-            </p>
-          </div>
-
-          <Link
-            to="/analysis/new"
-            className="inline-flex items-center gap-2 rounded-xl
-              bg-teal-700 px-4 py-2.5 text-sm font-semibold
-              text-white shadow-sm transition hover:bg-teal-800"
-          >
-            <Plus size={17} />
-            <span className="hidden sm:inline">New Case</span>
-          </Link>
-        </header>
-
-        <div className="mx-auto max-w-[1440px] space-y-6 p-5 sm:p-8">
-          {/* Page introduction */}
-          <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div>
-              <div
-                className="mb-2 flex items-center gap-2 text-sm
-                font-medium text-teal-700"
-              >
-                <FolderOpen size={17} />
-                Your workspace
-              </div>
-
-              <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Your cases
-              </h1>
-
-              <p className="mt-2 max-w-xl text-sm leading-6 text-slate-500">
-                View your cases, check analysis progress, and revisit previous
-                results from one place.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <ShieldNote />
-              Your personal case list
-            </div>
-          </section>
-
-          {/* Summary cards */}
-          <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <SummaryCard
-              title="Total cases"
-              value={loading ? "—" : cases.length}
-              description="Cases in your account"
-              icon={FolderOpen}
-              iconClass="bg-teal-50 text-teal-700"
-            />
-
-            <SummaryCard
-              title="Completed"
-              value={loading ? "—" : completedCount}
-              description="Cases marked as completed"
-              icon={CheckCircle2}
-              iconClass="bg-emerald-50 text-emerald-700"
-            />
-
-            <SummaryCard
-              title="Pending"
-              value={loading ? "—" : pendingCount}
-              description="Cases awaiting analysis"
-              icon={Clock3}
-              iconClass="bg-amber-50 text-amber-700"
-            />
-          </section>
-
-          {/* Case list */}
-          <section
-            className="overflow-hidden rounded-2xl border
-            border-slate-200/80 bg-white shadow-sm shadow-slate-900/[0.02]"
-          >
-            <div
-              className="flex flex-col gap-4 border-b
-              border-slate-100 p-5 sm:flex-row sm:items-center
-              sm:justify-between sm:px-6"
-            >
-              <div>
-                <h2 className="font-bold text-slate-800">All cases</h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  {loading
-                    ? "Loading your cases..."
-                    : `${filteredCases.length} ${
-                        filteredCases.length === 1 ? "case" : "cases"
-                      } found`}
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row">
-                <div className="relative">
-                  <Search
-                    size={17}
-                    className="absolute left-3 top-1/2
-                      -translate-y-1/2 text-slate-400"
-                  />
-                  <input
-                    type="search"
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search cases..."
-                    aria-label="Search cases"
-                    className="h-10 w-full rounded-xl border
-                      border-slate-200 bg-slate-50 pl-9 pr-3
-                      text-sm text-slate-700 outline-none
-                      transition placeholder:text-slate-400
-                      focus:border-teal-400 focus:bg-white
-                      focus:ring-4 focus:ring-teal-500/10
-                      sm:w-56"
-                  />
-                </div>
-
-                <div className="relative">
-                  <SlidersHorizontal
-                    size={15}
-                    className="pointer-events-none absolute left-3
-                      top-1/2 -translate-y-1/2 text-slate-400"
-                  />
-                  <select
-                    value={statusFilter}
-                    onChange={(event) => setStatusFilter(event.target.value)}
-                    aria-label="Filter cases by status"
-                    className="h-10 w-full appearance-none rounded-xl
-                      border border-slate-200 bg-white pl-9 pr-8
-                      text-sm text-slate-700 outline-none
-                      focus:border-teal-400 focus:ring-4
-                      focus:ring-teal-500/10 sm:w-40"
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="completed">Completed</option>
-                    <option value="processing">Processing</option>
-                    <option value="pending">Pending</option>
-                    <option value="failed">Failed</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {error && (
-              <div
-                className="m-5 flex flex-col gap-3 rounded-xl
-                border border-red-200 bg-red-50 p-4 sm:flex-row
-                sm:items-center sm:justify-between"
-              >
-                <div className="flex items-start gap-3">
-                  <AlertCircle
-                    size={19}
-                    className="mt-0.5 shrink-0 text-red-600"
-                  />
-                  <div>
-                    <p className="text-sm font-semibold text-red-800">
-                      Unable to load cases
-                    </p>
-                    <p className="mt-1 text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={loadCases}
-                  className="inline-flex items-center justify-center gap-2
-                    rounded-lg border border-red-200 bg-white
-                    px-3 py-2 text-sm font-semibold text-red-700
-                    hover:bg-red-100"
-                >
-                  <RefreshCw size={15} />
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {loading ? (
-              <div className="space-y-4 p-6">
-                {[1, 2, 3, 4].map((item) => (
-                  <div key={item} className="flex animate-pulse gap-4">
-                    <div className="h-11 w-11 rounded-xl bg-slate-100" />
-                    <div className="flex-1 space-y-2 py-1">
-                      <div className="h-3 w-1/3 rounded bg-slate-100" />
-                      <div className="h-3 w-1/2 rounded bg-slate-100" />
-                    </div>
-                    <div className="h-6 w-20 rounded-full bg-slate-100" />
-                  </div>
-                ))}
-              </div>
-            ) : !error && filteredCases.length === 0 ? (
-              <div className="flex flex-col items-center px-5 py-14 text-center">
-                <div
-                  className="flex h-16 w-16 items-center
-                  justify-center rounded-2xl bg-teal-50 text-teal-700"
-                >
-                  <FolderOpen size={28} strokeWidth={1.7} />
-                </div>
-
-                <h3 className="mt-5 font-semibold text-slate-800">
-                  {cases.length === 0 ? "No cases yet" : "No matching cases"}
-                </h3>
-
-                <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">
-                  {cases.length === 0
-                    ? "Create a case to start organizing your skin images and future analysis results."
-                    : "Try a different search term or change the status filter."}
-                </p>
-
-                {cases.length === 0 ? (
-                  <Link
-                    to="/analysis/new"
-                    className="mt-5 inline-flex items-center gap-2
-                      rounded-xl bg-teal-700 px-4 py-2.5
-                      text-sm font-semibold text-white
-                      transition hover:bg-teal-800"
-                  >
-                    <Plus size={17} />
-                    Create your first case
-                  </Link>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setStatusFilter("all");
-                    }}
-                    className="mt-5 text-sm font-semibold text-teal-700
-                      hover:text-teal-900"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[650px] text-left">
-                  <thead className="bg-slate-50/80">
-                    <tr
-                      className="text-[11px] font-semibold
-                      uppercase tracking-wider text-slate-500"
-                    >
-                      <th className="px-6 py-4">Case</th>
-                      <th className="px-5 py-4">Created</th>
-                      <th className="px-5 py-4">Status</th>
-                      <th className="px-6 py-4 text-right">Action</th>
-                    </tr>
-                  </thead>
-
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredCases.map((item, index) => {
-                      const id = getCaseId(item);
-                      const status = getStatusStyle(getCaseStatus(item));
-                      const StatusIcon = status.Icon;
-                      const title = getCaseTitle(item);
-
-                      return (
-                        <tr
-                          key={id ?? index}
-                          className="transition hover:bg-slate-50/80"
-                        >
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="flex h-11 w-11 shrink-0
-                                items-center justify-center rounded-xl
-                                border border-teal-100 bg-teal-50
-                                text-teal-700"
-                              >
-                                <FileText size={19} />
-                              </div>
-
-                              <div>
-                                <p className="text-sm font-semibold text-slate-800">
-                                  {title}
-                                </p>
-                                <p className="mt-1 text-xs text-slate-500">
-                                  {id != null
-                                    ? `ID: ${id}`
-                                    : "Case ID unavailable"}
-                                </p>
-                              </div>
-                            </div>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <div
-                              className="flex items-center gap-2
-                              text-sm text-slate-600"
-                            >
-                              <CalendarDays
-                                size={15}
-                                className="text-slate-400"
-                              />
-                              {formatDate(getCaseDate(item))}
-                            </div>
-                          </td>
-
-                          <td className="px-5 py-4">
-                            <span
-                              className={`inline-flex items-center
-                              gap-1.5 rounded-full px-2.5 py-1
-                              text-xs font-semibold ring-1 ring-inset
-                              ${status.className}`}
-                            >
-                              <StatusIcon size={13} />
-                              {status.label}
-                            </span>
-                          </td>
-
-                          <td className="px-6 py-4 text-right">
-                            {id != null ? (
-                              <Link
-                                to={`/cases/${encodeURIComponent(id)}`}
-                                className="inline-flex items-center gap-1.5
-                                  rounded-lg px-3 py-2 text-sm
-                                  font-semibold text-teal-700
-                                  transition hover:bg-teal-50"
-                              >
-                                View case
-                                <ArrowRight size={15} />
-                              </Link>
-                            ) : (
-                              <span className="text-xs text-slate-400">
-                                No case ID
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          <p className="text-center text-xs leading-5 text-slate-400">
-            DermAI provides AI-assisted analysis and is not a standalone medical
-            diagnosis.
-          </p>
-        </div>
-      </main>
-    </div>
-  );
+  return <div className="space-y-7">
+    <PageTitle eyebrow="Case records" title="Case management" description="Search, review, and organize case records. Image intake is available; prediction and diagnosis results are not provided by this backend." action={<Button as={Link} to="/app/cases/new"><Plus size={16}/>New case</Button>}/>
+    {error && <Notice kind="error">{error}<button type="button" onClick={load} className="ml-2 font-semibold underline">Try again</button></Notice>}
+    <section className="overflow-hidden rounded-2xl border border-[#e4e1da] bg-white">
+      <div className="grid gap-3 border-b border-[#eeece6] p-4 sm:grid-cols-[minmax(220px,1fr)_190px_auto] sm:items-end sm:p-5"><div><label className="mb-1.5 block text-xs font-medium text-[#6d6a62]">Find a case</label><SearchField value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Case label, ID, location"/></div><SelectField label="Record status" value={status} onChange={(event) => { setStatus(event.target.value); setOffset(0); }}><option value="">All statuses</option><option value="created">Created</option><option value="image_uploaded">Image uploaded</option></SelectField><p className="text-xs text-[#858178]">Page {Math.floor(offset / 20) + 1} · {cases.length} records</p></div>
+      {loading ? <Loading label="Loading cases"/> : filtered.length === 0 ? <EmptyState icon={ClipboardList} title={search ? "No cases match your search" : "No case records yet"} description={search ? "Try another case label, identifier, or location." : "Create a case record to organize a patient image."} action={!search && <Button as={Link} to="/app/cases/new"><Plus size={15}/>Create a case</Button>}/> : <div className="overflow-x-auto"><table className="w-full min-w-[780px] text-left"><thead className="border-b border-[#eeece6] bg-[#fbfaf8] text-[10px] uppercase tracking-[0.14em] text-[#89867e]"><tr><th scope="col" className="px-5 py-3 font-semibold">Case record</th>{user?.role === "clinician" && <th scope="col" className="px-4 py-3 font-semibold">Patient</th>}<th scope="col" className="px-4 py-3 font-semibold">Body location</th><th scope="col" className="px-4 py-3 font-semibold">Status</th><th scope="col" className="px-4 py-3 font-semibold">Created</th><th scope="col" className="px-4 py-3"/></tr></thead><tbody className="divide-y divide-[#efede8]">{filtered.map((item) => <tr key={item.id} className="transition hover:bg-[#fcfbf9]"><td className="px-5 py-4"><Link to={`/app/cases/${item.id}`} className="text-sm font-semibold text-[#373630] hover:text-[#a25539]">{item.case_label || "Untitled case"}</Link><p className="mt-1 max-w-[230px] truncate font-mono text-[10px] text-[#929087]">{item.id}</p></td>{user?.role === "clinician" && <td className="px-4 py-4 text-sm text-[#626057]">{patientNames[item.patient_id] || "Patient record"}</td>}<td className="px-4 py-4 text-sm text-[#626057]">{item.body_location || "Not recorded"}</td><td className="px-4 py-4"><span className="rounded-full bg-[#f1eee8] px-2.5 py-1 text-xs capitalize text-[#625e55]">{item.status?.replaceAll("_", " ")}</span></td><td className="px-4 py-4"><span className="inline-flex items-center gap-1.5 text-sm text-[#77746c]"><CalendarDays size={14}/>{dateLabel(item.created_at)}</span></td><td className="px-4 py-4 text-right"><div className="flex justify-end gap-1"><Link to={`/app/upload?case=${item.id}`} title="Add image" className="rounded-md p-2 text-[#817d73] hover:bg-[#f2efe8] hover:text-[#9e5439]"><ImagePlus size={16}/></Link><Link to={`/app/cases/${item.id}`} title="Open details" className="rounded-md p-2 text-[#817d73] hover:bg-[#f2efe8] hover:text-[#9e5439]"><ArrowRight size={16}/></Link></div></td></tr>)}</tbody></table></div>}
+      <div className="flex items-center justify-between border-t border-[#eeece6] px-5 py-3"><span className="text-xs text-[#89867e]">Showing records from your account</span><div className="flex gap-2"><Button variant="secondary" disabled={!offset || loading} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</Button><Button variant="secondary" disabled={!hasNext || loading} onClick={() => setOffset(offset + 20)}>Next</Button></div></div>
+    </section>
+  </div>;
 }
 
-function SummaryCard({ title, value, description, icon: Icon, iconClass }) {
-  return (
-    <article
-      className="rounded-2xl border border-slate-200/80
-      bg-white p-5 shadow-sm shadow-slate-900/[0.02]"
-    >
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
-          <p className="mt-3 text-3xl font-bold tracking-tight text-slate-800">
-            {value}
-          </p>
-        </div>
-
-        <div className={`rounded-xl p-3 ${iconClass}`}>
-          <Icon size={21} />
-        </div>
-      </div>
-
-      <p className="mt-4 text-xs text-slate-500">{description}</p>
-    </article>
-  );
-}
-
-function ShieldNote() {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <Activity size={15} />
-      Personal workspace
-    </span>
-  );
+export function CreateCasePage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [query] = useSearchParams();
+  const patientQuery = query.get("patient");
+  const [patients, setPatients] = useState([]);
+  const [ownPatient, setOwnPatient] = useState(null);
+  const [form, setForm] = useState({ patient_id: "", case_label: "", body_location: "", image_source: "mobile_camera", capture_date: new Date().toISOString().slice(0, 16), description: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    const request = user?.role === "clinician" ? patientApi.list({ limit: 100 }) : patientApi.me();
+    request.then((result) => { if (!active) return; if (user?.role === "clinician") { setPatients(result); const selectedPatient = result.find((item) => item.id === patientQuery); if (selectedPatient) setForm((current) => ({ ...current, patient_id: selectedPatient.id })); } else { setOwnPatient(result); setForm((current) => ({ ...current, patient_id: result.id })); } }).catch((err) => { if (active && user?.role === "user" && err.response?.status !== 404) setError(errorMessage(err, "Could not load your profile.")); }).finally(() => active && setLoading(false));
+    return () => { active = false; };
+  }, [user?.role, patientQuery]);
+  async function submit(event) {
+    event.preventDefault(); setSaving(true); setError("");
+    try { const record = await caseApi.create({ patient_id: form.patient_id, case_label: form.case_label.trim() || null, body_location: form.body_location || null, image_source: form.image_source, capture_date: form.capture_date ? new Date(form.capture_date).toISOString() : null, description: form.description.trim() || null }); navigate(`/app/cases/${record.id}`, { replace: true, state: { created: true } }); }
+    catch (err) { setError(errorMessage(err, "Could not create the case.")); }
+    finally { setSaving(false); }
+  }
+  return <div className="mx-auto max-w-3xl space-y-6"><PageTitle eyebrow="Case records" title="Create a case" description="Add the case context needed to organize image uploads. Avoid direct identifiers in the description."/>{error && <Notice kind="error">{error}</Notice>}{loading ? <Loading label="Loading patient records"/> : user?.role === "user" && !ownPatient ? <Notice kind="warning">Create your patient profile before opening a case. <Link to="/app/profile" className="ml-1 font-semibold underline">Open profile</Link></Notice> : <form onSubmit={submit} className="space-y-5 rounded-2xl border border-[#e4e1da] bg-white p-5 sm:p-7">{user?.role === "clinician" ? <SelectField label="Patient record" required value={form.patient_id} onChange={(event) => setForm({ ...form, patient_id: event.target.value })}><option value="">Select a patient</option>{patients.map((p) => <option key={p.id} value={p.id}>{p.patient_name || p.patient_code} · {p.patient_code}</option>)}</SelectField> : <div className="rounded-lg bg-[#f5f3ee] p-3 text-sm text-[#656158]">Patient profile: {ownPatient?.patient_name || ownPatient?.patient_code}</div>}
+      {user?.role === "clinician" && patients.length === 0 && <Notice kind="warning">No patient records found. <Link to="/app/patients" className="ml-1 font-semibold underline">Add a patient</Link></Notice>}
+      <label className="block text-sm font-medium text-[#484640]">Case label <span className="font-normal text-[#89867e]">(optional)</span><input maxLength={100} value={form.case_label} onChange={(event) => setForm({ ...form, case_label: event.target.value })} className="mt-1.5 w-full rounded-lg border border-[#d9d6ce] px-3 py-2.5 text-sm outline-none focus:border-[#bc6747]" placeholder="e.g. Forearm image, spring visit"/></label>
+      <div className="grid gap-4 sm:grid-cols-2"><label className="block text-sm font-medium text-[#484640]">Body location<select value={form.body_location} onChange={(event) => setForm({ ...form, body_location: event.target.value })} className="mt-1.5 w-full rounded-lg border border-[#d9d6ce] bg-white px-3 py-2.5 text-sm"><option value="">Not recorded</option>{["Head", "Face", "Neck", "Chest", "Back", "Abdomen", "Arm", "Forearm", "Hand", "Leg", "Foot", "Other"].map((v) => <option key={v}>{v}</option>)}</select></label><label className="block text-sm font-medium text-[#484640]">Image source<select value={form.image_source} onChange={(event) => setForm({ ...form, image_source: event.target.value })} className="mt-1.5 w-full rounded-lg border border-[#d9d6ce] bg-white px-3 py-2.5 text-sm"><option value="mobile_camera">Mobile camera</option><option value="camera">Camera</option><option value="gallery">Photo library</option><option value="other">Other</option></select></label></div>
+      <label className="block text-sm font-medium text-[#484640]">Capture date<input type="datetime-local" value={form.capture_date} onChange={(event) => setForm({ ...form, capture_date: event.target.value })} className="mt-1.5 w-full rounded-lg border border-[#d9d6ce] px-3 py-2.5 text-sm"/></label>
+      <label className="block text-sm font-medium text-[#484640]">Description <span className="font-normal text-[#89867e]">(de-identified)</span><textarea rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} maxLength={3000} className="mt-1.5 w-full rounded-lg border border-[#d9d6ce] px-3 py-2.5 text-sm outline-none focus:border-[#bc6747]" placeholder="Optional, non-identifying context"/></label>
+      <div className="flex justify-end gap-2"><Button as={Link} to="/app/cases" variant="secondary">Cancel</Button><Button disabled={saving || loading || (user?.role === "clinician" && patients.length === 0)}>{saving ? "Creating…" : "Create case"}<ArrowRight size={15}/></Button></div>
+    </form>}</div>;
 }

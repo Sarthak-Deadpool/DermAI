@@ -9,7 +9,10 @@ from torch.utils.data import Dataset
 from torchvision.transforms import functional as TF
 
 
-from backend.app.services.image_preprocessing import preprocess_image
+from backend.app.services.image_preprocessing import (
+    DEFAULT_PREPROCESS_CONFIG,
+    preprocess_image,
+)
 
 
 
@@ -28,6 +31,30 @@ CLASS_TO_IDX = {
 
 VALID_SPLITS = {"train", "validation", "test"}
 
+MEAN = torch.tensor(DEFAULT_PREPROCESS_CONFIG.mean, dtype=torch.float32).view(3, 1, 1)
+STD = torch.tensor(DEFAULT_PREPROCESS_CONFIG.std, dtype=torch.float32).view(3, 1, 1)
+
+
+def preprocess_dataset_image(image_path: str | Path, *, augment: bool = False) -> torch.Tensor:
+    """Apply the shared serving transform and optional train-only augmentation."""
+    image_array = preprocess_image(image_path, config=DEFAULT_PREPROCESS_CONFIG)
+    image = torch.from_numpy(image_array).permute(2, 0, 1).contiguous()
+    if augment:
+        # Augment in [0,1] pixel space, then restore the shared normalized input.
+        image = image * STD + MEAN
+        if random.random() < 0.5:
+            image = TF.hflip(image)
+        angle = random.uniform(-15.0, 15.0)
+        image = TF.rotate(
+            image,
+            angle=angle,
+            interpolation=TF.InterpolationMode.BILINEAR,
+        )
+        image = ColorJitter(brightness=0.10, contrast=0.10)(image)
+        image = image.clamp(0.0, 1.0)
+        image = (image - MEAN) / STD
+    return image
+
 
 def validate_manifest(manifest: pd.DataFrame) -> None:
     required_columns = {
@@ -43,7 +70,7 @@ def validate_manifest(manifest: pd.DataFrame) -> None:
         raise ValueError(
             f"Manifest is missing columns: {sorted(missing)}"
         )
-        
+
     if manifest.empty:
          raise ValueError("Manifest contains no records")
      
@@ -135,33 +162,8 @@ class DermAIDataset(Dataset):
         row  = self.records.iloc[index]
         image_path = self.image_path[index]
         
-        image_array = preprocess_image(image_path, size=(224,224))
-        
-        image = torch.from_numpy(image_array).permute(2, 0, 1).contiguous()
-        
-        if self.augment:
-            if random.random() < 0.5:
-                image = TF.hflip(image)
-                
-                
-            angle = random.uniform(-15.0, 15.0)
-            image = TF.rotate(
-                image,
-                angle=angle,
-                interpolation= TF.InterpolationMode.BILINEAR,
-            )
-            
-            image = ColorJitter(
-                brightness=0.10,
-                contrast=0.10,
-            )(image)
-            
-            image = image.clamp(0.0, 1.0)
-            
-        
+        image = preprocess_dataset_image(image_path, augment=self.augment)
         label = CLASS_TO_IDX[row["diagnostic"]]
         target = torch.tensor(label, dtype=torch.long)
-        
+
         return image, target
-        
-        
